@@ -1,0 +1,35 @@
+#pragma once
+
+#include "mfem.hpp"
+
+namespace mono {
+
+// Conductivity tensor coefficient:
+// D = sigma_f f f^T + sigma_s s s^T + sigma_n n n^T
+// where f,s,n are local fiber-sheet-normal directions.
+class FiberTensorCoefficient : public mfem::MatrixCoefficient {
+ public:
+  FiberTensorCoefficient(int dim,
+                         double sigma_f,
+                         double sigma_s,
+                         double sigma_n,
+                         mfem::VectorCoefficient& f_coeff,
+                         mfem::VectorCoefficient& s_coeff,
+                         mfem::VectorCoefficient& n_coeff);
+
+  void Eval(mfem::DenseMatrix& K,
+            mfem::ElementTransformation& T,
+            const mfem::IntegrationPoint& ip) override;
+
+ private:
+  double sigma_f_;
+  double sigma_s_;
+  double sigma_n_;
+  mfem::VectorCoefficient& f_coeff_;
+  mfem::VectorCoefficient& s_coeff_;
+  mfem::VectorCoefficient& n_coeff_;
+
+  static void Normalize(mfem::Vector& v, const mfem::Vector& fallback);
+};
+
+}  // namespace mono

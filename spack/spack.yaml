@@ -1,0 +1,7 @@
+spack:
+  specs:
+  - mfem@4.6:+mpi+petsc+metis+zlib
+  - petsc@3.19:+mpi+hypre+metis
+  view: false
+  concretizer:
+    unify: true

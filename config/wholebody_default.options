@@ -1,0 +1,58 @@
+# Heart mesh/fibers (Niederer benchmark)
+mesh_path=benchmarks/niederer/niederer_benchmark.mesh
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# Whole-body extension
+enable_wholebody=1
+torso_mesh_path=benchmarks/torso_box/torso_box.mesh
+
+# Monodomain effective conductivity
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Recovery conductivity tensors (fiber, sheet, normal)
+sigma_i_f_mS_per_mm=0.174
+sigma_i_s_mS_per_mm=0.019
+sigma_i_n_mS_per_mm=0.019
+sigma_e_f_mS_per_mm=0.625
+sigma_e_s_mS_per_mm=0.236
+sigma_e_n_mS_per_mm=0.236
+
+# Torso conductivity and interface mapping
+sigma_torso_mS_per_mm=0.2
+interface_map_max_dist_mm=1.0
+torso_dirichlet_penalty=1e6
+heart_interface_bdr_attrs=1
+
+# Time
+dt_pde_ms=0.02
+dt_ode_ms=0.01
+t_end_ms=1.0
+
+# Stimulus
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# IO
+output_stride=20
+checkpoint_stride=100
+output_dir=output/wholebody_default
+checkpoint_dir=checkpoint/wholebody_default

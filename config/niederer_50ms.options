@@ -1,0 +1,42 @@
+# Niederer benchmark (file-based mesh/fiber)
+mesh_path=benchmarks/niederer/niederer_benchmark.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# Material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.005
+dt_ode_ms=0.005
+t_end_ms=50.0
+
+# Stimulus
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+stim_fraction=0.03
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# Output
+output_stride=100
+checkpoint_stride=500
+output_dir=output/niederer_50ms
+checkpoint_dir=checkpoint/niederer_50ms

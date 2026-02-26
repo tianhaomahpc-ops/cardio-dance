@@ -1,0 +1,12 @@
+build/
+output/
+checkpoint/
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+*.out
+*.swp
+*.DS_Store
+test_config_parse.options

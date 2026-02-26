@@ -1,0 +1,35 @@
+# Mesh
+mesh_path=benchmarks/niederer/niederer_benchmark.mesh
+use_fiber_gf=0
+fiber_f_path=
+fiber_s_path=
+fiber_n_path=
+
+# Material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.02
+dt_ode_ms=0.01
+t_end_ms=5.0
+
+# Stimulus (monodomain-level)
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_fraction=0.05
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# IO
+output_stride=20
+checkpoint_stride=100
+output_dir=output
+checkpoint_dir=checkpoint
