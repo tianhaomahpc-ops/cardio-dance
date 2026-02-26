@@ -1,6 +1,9 @@
 build/
 output/
 checkpoint/
+--output-dir/
+Testing/
+benchmarks/
 *.o
 *.obj
 *.so
