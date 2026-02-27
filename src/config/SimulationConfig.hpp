@@ -59,6 +59,11 @@ struct SimulationConfig {
   std::vector<int> torso_volume_attrs;
   std::vector<int> heart_interface_bdr_attrs;
   std::vector<int> torso_interface_bdr_attrs;
+  bool enable_regional_heart_models = false;
+  std::vector<int> atria_volume_attrs;
+  std::vector<int> ventricles_volume_attrs;
+  std::vector<int> fibrosis_volume_attrs;
+  double fibrosis_sigma_scale = 0.1;
 
   double dt_pde_ms = 0.02;
   double dt_ode_ms = 0.01;

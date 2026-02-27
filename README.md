@@ -123,7 +123,7 @@ Outputs:
 - `output/niederer_50ms/monodomain/*.pvd/.pvtu/.vtu`
 - `checkpoint/niederer_50ms/latest.meta`
 - `checkpoint/niederer_50ms/vm_rank%06d.gf` (one shard per MPI rank)
-- `checkpoint/niederer_50ms/tt06_rank%06d.bin` (one shard per MPI rank)
+- `checkpoint/niederer_50ms/ionic_rank%06d.bin` (one shard per MPI rank)
 
 Optional literature-fit comparison run (conductivity scaled, same anisotropy):
 
@@ -212,6 +212,7 @@ Optional:
 
 Reference config: `config/wholebody_default.options`
 Conforming reference config: `config/wholebody_conforming.options`
+Conforming regional reference config: `config/wholebody_conforming_regional.options`
 
 Detailed workflow and literature-comparison checklist:
 

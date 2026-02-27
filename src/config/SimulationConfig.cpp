@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace mono {
 namespace {
@@ -163,6 +164,11 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "torso_volume_attrs") cfg.torso_volume_attrs = ParseIntList(val);
     else if (key == "heart_interface_bdr_attrs") cfg.heart_interface_bdr_attrs = ParseIntList(val);
     else if (key == "torso_interface_bdr_attrs") cfg.torso_interface_bdr_attrs = ParseIntList(val);
+    else if (key == "enable_regional_heart_models") cfg.enable_regional_heart_models = ParseBool(val);
+    else if (key == "atria_volume_attrs") cfg.atria_volume_attrs = ParseIntList(val);
+    else if (key == "ventricles_volume_attrs") cfg.ventricles_volume_attrs = ParseIntList(val);
+    else if (key == "fibrosis_volume_attrs") cfg.fibrosis_volume_attrs = ParseIntList(val);
+    else if (key == "fibrosis_sigma_scale") cfg.fibrosis_sigma_scale = std::stod(val);
     else if (key == "dt_pde_ms") cfg.dt_pde_ms = std::stod(val);
     else if (key == "dt_ode_ms") cfg.dt_ode_ms = std::stod(val);
     else if (key == "t_end_ms") cfg.t_end_ms = std::stod(val);
@@ -212,6 +218,41 @@ SimulationConfig LoadConfigFile(const std::string& path) {
   }
   if (cfg.use_conforming_wholebody && !cfg.enable_wholebody) {
     throw std::runtime_error("use_conforming_wholebody=1 requires enable_wholebody=1");
+  }
+  if (cfg.enable_regional_heart_models) {
+    if (cfg.atria_volume_attrs.empty() || cfg.ventricles_volume_attrs.empty() ||
+        cfg.fibrosis_volume_attrs.empty()) {
+      throw std::runtime_error(
+          "enable_regional_heart_models=1 requires atria_volume_attrs, ventricles_volume_attrs, and fibrosis_volume_attrs");
+    }
+    if (cfg.fibrosis_sigma_scale <= 0.0) {
+      throw std::runtime_error("fibrosis_sigma_scale must be > 0");
+    }
+
+    std::unordered_set<int> attrs;
+    auto insert_unique = [&attrs](const std::vector<int>& v, const char* name) {
+      for (const int a : v) {
+        if (a <= 0) {
+          throw std::runtime_error(std::string(name) + " must contain positive attributes");
+        }
+        if (!attrs.insert(a).second) {
+          throw std::runtime_error("Regional heart attr sets must be disjoint");
+        }
+      }
+    };
+    insert_unique(cfg.atria_volume_attrs, "atria_volume_attrs");
+    insert_unique(cfg.ventricles_volume_attrs, "ventricles_volume_attrs");
+    insert_unique(cfg.fibrosis_volume_attrs, "fibrosis_volume_attrs");
+
+    if (cfg.enable_wholebody && cfg.use_conforming_wholebody) {
+      std::unordered_set<int> heart(cfg.heart_volume_attrs.begin(), cfg.heart_volume_attrs.end());
+      for (const int a : attrs) {
+        if (heart.find(a) == heart.end()) {
+          throw std::runtime_error(
+              "heart_volume_attrs must include all regional attrs when enable_regional_heart_models=1");
+        }
+      }
+    }
   }
   if (cfg.enable_wholebody) {
     if (cfg.use_conforming_wholebody) {
@@ -285,6 +326,11 @@ std::string ToString(const SimulationConfig& cfg) {
   oss << "torso_volume_attrs=" << cfg.torso_volume_attrs.size() << "\n";
   oss << "heart_interface_bdr_attrs=" << cfg.heart_interface_bdr_attrs.size() << "\n";
   oss << "torso_interface_bdr_attrs=" << cfg.torso_interface_bdr_attrs.size() << "\n";
+  oss << "enable_regional_heart_models=" << (cfg.enable_regional_heart_models ? 1 : 0) << "\n";
+  oss << "atria_volume_attrs=" << cfg.atria_volume_attrs.size() << "\n";
+  oss << "ventricles_volume_attrs=" << cfg.ventricles_volume_attrs.size() << "\n";
+  oss << "fibrosis_volume_attrs=" << cfg.fibrosis_volume_attrs.size() << "\n";
+  oss << "fibrosis_sigma_scale=" << cfg.fibrosis_sigma_scale << "\n";
   oss << "dt_pde_ms=" << cfg.dt_pde_ms << "\n";
   oss << "dt_ode_ms=" << cfg.dt_ode_ms << "\n";
   oss << "t_end_ms=" << cfg.t_end_ms << "\n";

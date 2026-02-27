@@ -18,6 +18,9 @@
 #include "coupling/InterfaceMapper.hpp"
 #include "io/CheckpointIO.hpp"
 #include "io/OutputManager.hpp"
+#include "ode/Grandi2011Model.hpp"
+#include "ode/IonicModel.hpp"
+#include "ode/RegionalIonicModel.hpp"
 #include "ode/TT06Model.hpp"
 #include "solver/ExtracellularRecoverySolver.hpp"
 #include "solver/LinearSolverFactory.hpp"
@@ -112,11 +115,16 @@ int main(int argc, char* argv[]) {
       }
       auto& assembler = *assembler_ptr;
 
-      mono::TT06Model tt06(assembler.TrueVSize());
-      tt06.InitializeRestState(-85.23);
+      std::unique_ptr<mono::IonicModel> ionic_model;
+      if (cfg.enable_regional_heart_models) {
+        ionic_model = std::make_unique<mono::RegionalIonicModel>(cfg, assembler.PFES());
+      } else {
+        ionic_model = std::make_unique<mono::TT06Model>(assembler.TrueVSize());
+      }
+      ionic_model->InitializeRestState(-85.23);
 
       mono::LinearSystemSolver linear_solver(cfg, MPI_COMM_WORLD, &assembler.PFES());
-      mono::MonodomainStepper stepper(cfg, assembler, tt06, linear_solver);
+      mono::MonodomainStepper stepper(cfg, assembler, *ionic_model, linear_solver);
 
       std::unique_ptr<mono::ExtracellularRecoverySolver> ue_solver;
       std::unique_ptr<mono::TorsoPotentialSolver> torso_solver;
@@ -149,6 +157,7 @@ int main(int argc, char* argv[]) {
       const bool checkpoint_enabled = (cfg.checkpoint_stride > 0);
       std::ofstream ksp_log;
       std::ofstream timing_log;
+      std::ofstream probe_vm_log;
 
       if (rank == 0) {
         std::filesystem::create_directories(cfg.output_dir);
@@ -296,6 +305,9 @@ int main(int argc, char* argv[]) {
             {"P7", {0.0, 7.0, 3.0}},
             {"P8", {20.0, 7.0, 3.0}},
             {"P9", {10.0, 3.5, 1.5}},
+            {"Atria", {4.5, 3.5, 1.5}},
+            {"Fibrosis", {10.0, 3.5, 1.5}},
+            {"Ventricle", {15.0, 3.5, 1.5}},
         };
 
         const mfem::ParMesh* pmesh = assembler.PFES().GetParMesh();
@@ -360,6 +372,41 @@ int main(int argc, char* argv[]) {
         return values;
       };
 
+      auto write_probe_vm_row = [&](double t_ms, const std::vector<double>& vm_values) {
+        if (!benchmark_probes || rank != 0 || !probe_vm_log.is_open()) {
+          return;
+        }
+        probe_vm_log << t_ms;
+        for (size_t i = 0; i < probes.size(); ++i) {
+          probe_vm_log << ",";
+          if (i < vm_values.size() && std::isfinite(vm_values[i])) {
+            probe_vm_log << vm_values[i];
+          } else {
+            probe_vm_log << "nan";
+          }
+        }
+        probe_vm_log << "\n";
+      };
+
+      if (benchmark_probes && rank == 0) {
+        const std::filesystem::path probe_log_path =
+            std::filesystem::path(cfg.output_dir) / "probe_vm.csv";
+        const bool append_probe =
+            restart_from_checkpoint && std::filesystem::exists(probe_log_path);
+        probe_vm_log.open(probe_log_path, append_probe ? std::ios::app : std::ios::trunc);
+        if (!probe_vm_log) {
+          throw std::runtime_error("failed to open probe vm log file: " + probe_log_path.string());
+        }
+        if (!append_probe) {
+          probe_vm_log << "time_ms";
+          for (const auto& probe : probes) {
+            probe_vm_log << "," << probe.name;
+          }
+          probe_vm_log << "\n";
+        }
+        probe_vm_log << std::setprecision(16);
+      }
+
       auto update_activation_times =
           [&](double t_prev_ms, double t_curr_ms, const std::vector<double>& vm_now) {
             for (size_t i = 0; i < probes.size(); ++i) {
@@ -382,7 +429,7 @@ int main(int argc, char* argv[]) {
       if (restart_from_checkpoint) {
         int restart_step = 0;
         double restart_t_ms = 0.0;
-        if (!checkpoint.LoadLatest(restart_step, restart_t_ms, assembler.Vm(), tt06)) {
+        if (!checkpoint.LoadLatest(restart_step, restart_t_ms, assembler.Vm(), *ionic_model)) {
           throw std::runtime_error("restart requested but checkpoint is missing or incompatible with current MPI size");
         }
         stepper.InitializeFromCurrentVm(restart_step, restart_t_ms);
@@ -398,6 +445,7 @@ int main(int argc, char* argv[]) {
               probes[i].prev_vm = vm0[i];
             }
           }
+          write_probe_vm_row(stepper.TimeMs(), vm0);
         }
 
         solve_wholebody_potentials();
@@ -413,6 +461,7 @@ int main(int argc, char* argv[]) {
               probes[i].prev_vm = vm0[i];
             }
           }
+          write_probe_vm_row(stepper.TimeMs(), vm0);
         }
 
         const double t_prev_ms = stepper.TimeMs();
@@ -451,7 +500,7 @@ int main(int argc, char* argv[]) {
 
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();
-          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), tt06);
+          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), *ionic_model);
           checkpoint_ms_local =
               std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
@@ -498,11 +547,14 @@ int main(int argc, char* argv[]) {
                       stepper.IionTrue(),
                       (cfg.enable_wholebody ? &ue_solver->UeTrue() : nullptr),
                       (cfg.enable_wholebody ? &torso_solver->UTTrue() : nullptr));
+          if (benchmark_probes) {
+            write_probe_vm_row(stepper.TimeMs(), sample_probe_vm());
+          }
           output_ms_local = std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();
-          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), tt06);
+          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), *ionic_model);
           checkpoint_ms_local =
               std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }

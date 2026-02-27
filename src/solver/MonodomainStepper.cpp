@@ -32,9 +32,12 @@ bool PointInStimulusRegion(const StimulusRegion& reg, const mfem::Vector& x, int
 
 MonodomainStepper::MonodomainStepper(const SimulationConfig& cfg,
                                      Assembler& assembler,
-                                     TT06Model& tt06,
+                                     IonicModel& ionic_model,
                                      LinearSystemSolver& linear_solver)
-    : cfg_(cfg), assembler_(assembler), tt06_(tt06), linear_solver_(linear_solver) {
+    : cfg_(cfg),
+      assembler_(assembler),
+      ionic_model_(ionic_model),
+      linear_solver_(linear_solver) {
   const int n = assembler_.TrueVSize();
   vm_n_.SetSize(n);
   vm_np1_.SetSize(n);
@@ -163,13 +166,13 @@ void MonodomainStepper::Bootstrap() {
 
   // 1) Evaluate ionic source at V^n/state^n.
   auto t_begin = Clock::now();
-  tt06_.ComputeIion(vm_n_, iion_true_);
+  ionic_model_.ComputeIion(vm_n_, iion_true_);
   auto t_end = Clock::now();
   last_timing_.iion_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 2) Advance ionic states first (ODE -> PDE coupling order).
   t_begin = Clock::now();
-  tt06_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
+  ionic_model_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
   t_end = Clock::now();
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
@@ -204,13 +207,13 @@ void MonodomainStepper::StepNoCorrection() {
 
   // 1) I_ion(V^n, state^n)
   auto t_begin = Clock::now();
-  tt06_.ComputeIion(vm_n_, iion_true_);
+  ionic_model_.ComputeIion(vm_n_, iion_true_);
   auto t_end = Clock::now();
   last_timing_.iion_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 2) Advance ionic states first (ODE -> PDE coupling order).
   t_begin = Clock::now();
-  tt06_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
+  ionic_model_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
   t_end = Clock::now();
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 

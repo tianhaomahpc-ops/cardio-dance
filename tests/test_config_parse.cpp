@@ -119,5 +119,47 @@ int main() {
   } catch (const std::exception&) {
   }
 
+  // regional heart model config parse.
+  const std::string regional_path = "test_config_parse_regional.options";
+  {
+    std::ofstream out(regional_path);
+    out << "enable_wholebody=1\n";
+    out << "use_conforming_wholebody=1\n";
+    out << "wholebody_mesh_path=benchmarks/wholebody/wholebody.mesh\n";
+    out << "heart_volume_attrs=11,12,13\n";
+    out << "torso_volume_attrs=2\n";
+    out << "enable_regional_heart_models=1\n";
+    out << "atria_volume_attrs=11\n";
+    out << "ventricles_volume_attrs=12\n";
+    out << "fibrosis_volume_attrs=13\n";
+    out << "fibrosis_sigma_scale=0.1\n";
+  }
+  try {
+    auto cfg = mono::LoadConfigFile(regional_path);
+    if (!cfg.enable_regional_heart_models) return 18;
+    if (cfg.atria_volume_attrs.size() != 1 || cfg.ventricles_volume_attrs.size() != 1 ||
+        cfg.fibrosis_volume_attrs.size() != 1) {
+      return 19;
+    }
+    if (std::abs(cfg.fibrosis_sigma_scale - 0.1) > 1e-12) return 20;
+  } catch (const std::exception&) {
+    return 21;
+  }
+
+  const std::string bad_regional_overlap = "test_config_parse_bad_regional_overlap.options";
+  {
+    std::ofstream out(bad_regional_overlap);
+    out << "mesh_path=benchmarks/niederer/niederer_benchmark.mesh\n";
+    out << "enable_regional_heart_models=1\n";
+    out << "atria_volume_attrs=11\n";
+    out << "ventricles_volume_attrs=11\n";
+    out << "fibrosis_volume_attrs=13\n";
+  }
+  try {
+    (void)mono::LoadConfigFile(bad_regional_overlap);
+    return 22;
+  } catch (const std::exception&) {
+  }
+
   return 0;
 }

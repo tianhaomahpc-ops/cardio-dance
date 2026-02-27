@@ -1,7 +1,7 @@
 #pragma once
 
 #include "config/SimulationConfig.hpp"
-#include "ode/TT06Model.hpp"
+#include "ode/IonicModel.hpp"
 #include "solver/LinearSolverFactory.hpp"
 #include "space/Assembler.hpp"
 
@@ -26,7 +26,7 @@ class MonodomainStepper {
  public:
   MonodomainStepper(const SimulationConfig& cfg,
                     Assembler& assembler,
-                    TT06Model& tt06,
+                    IonicModel& ionic_model,
                     LinearSystemSolver& linear_solver);
 
   void InitializeVm(double v_init_mv);
@@ -45,7 +45,7 @@ class MonodomainStepper {
  private:
   const SimulationConfig& cfg_;
   Assembler& assembler_;
-  TT06Model& tt06_;
+  IonicModel& ionic_model_;
   LinearSystemSolver& linear_solver_;
 
   double t_ms_ = 0.0;

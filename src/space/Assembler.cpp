@@ -92,7 +92,13 @@ void Assembler::InitializeFiberCoefficients(int dim) {
                                                          cfg_.sigma_n_mS_per_mm,
                                                          *const_f_coeff_,
                                                          *const_s_coeff_,
-                                                         *const_n_coeff_);
+                                                         *const_n_coeff_,
+                                                         cfg_.enable_regional_heart_models
+                                                             ? cfg_.fibrosis_volume_attrs
+                                                             : std::vector<int>{},
+                                                         cfg_.enable_regional_heart_models
+                                                             ? cfg_.fibrosis_sigma_scale
+                                                             : 1.0);
     use_loaded_fibers_ = false;
     return;
   }
@@ -143,7 +149,13 @@ void Assembler::InitializeFiberCoefficients(int dim) {
                                                        cfg_.sigma_n_mS_per_mm,
                                                        *fiber_f_coeff_,
                                                        *fiber_s_coeff_,
-                                                       *fiber_n_coeff_);
+                                                       *fiber_n_coeff_,
+                                                       cfg_.enable_regional_heart_models
+                                                           ? cfg_.fibrosis_volume_attrs
+                                                           : std::vector<int>{},
+                                                       cfg_.enable_regional_heart_models
+                                                           ? cfg_.fibrosis_sigma_scale
+                                                           : 1.0);
   use_loaded_fibers_ = true;
 }
 

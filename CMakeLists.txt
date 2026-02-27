@@ -13,7 +13,11 @@ include(Dependencies)
 
 add_library(monodomain_core
   src/config/SimulationConfig.cpp
+  src/ode/Grandi2011Model.cpp
+  src/ode/PassiveModel.cpp
+  src/ode/RegionalIonicModel.cpp
   src/ode/TT06Model.cpp
+  src/ode/grandi2011_generated.c
   src/space/FiberTensorCoefficient.cpp
   src/space/Assembler.cpp
   src/solver/LinearSolverFactory.cpp
@@ -56,9 +60,16 @@ target_link_libraries(generate_conforming_wholebody_case PRIVATE monodomain_core
 add_executable(generate_mesh_attr_gf tools/generate_mesh_attr_gf.cpp)
 target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 
+add_executable(split_niederer_x_regions tools/split_niederer_x_regions.cpp)
+target_link_libraries(split_niederer_x_regions PRIVATE monodomain_core)
+
 add_executable(test_tt06_single_cell tests/test_tt06_single_cell.cpp)
 target_link_libraries(test_tt06_single_cell PRIVATE monodomain_core)
 add_test(NAME tt06_single_cell COMMAND test_tt06_single_cell)
+
+add_executable(test_passive_model tests/test_passive_model.cpp)
+target_link_libraries(test_passive_model PRIVATE monodomain_core)
+add_test(NAME passive_model COMMAND test_passive_model)
 
 add_executable(test_config_parse tests/test_config_parse.cpp)
 target_link_libraries(test_config_parse PRIVATE monodomain_core)

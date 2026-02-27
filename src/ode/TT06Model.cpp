@@ -45,8 +45,8 @@ TT06Model::TT06Model(int n_local_true_dofs)
       states_(static_cast<size_t>(n_local_true_dofs) * kNumStates, 0.0),
       rates_(static_cast<size_t>(n_local_true_dofs) * kNumRates, 0.0),
       constants_(static_cast<size_t>(n_local_true_dofs) * kNumConsts, 0.0) {
-  if (n_nodes_ <= 0) {
-    throw std::runtime_error("TT06Model requires n_local_true_dofs > 0");
+  if (n_nodes_ < 0) {
+    throw std::runtime_error("TT06Model requires n_local_true_dofs >= 0");
   }
 }
 

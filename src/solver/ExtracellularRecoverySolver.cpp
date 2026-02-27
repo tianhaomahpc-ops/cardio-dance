@@ -62,14 +62,26 @@ ExtracellularRecoverySolver::ExtracellularRecoverySolver(const SimulationConfig&
                                                         cfg_.sigma_i_n_mS_per_mm + cfg_.sigma_e_n_mS_per_mm,
                                                         *f_coeff_,
                                                         *s_coeff_,
-                                                        *n_coeff_);
+                                                        *n_coeff_,
+                                                        cfg_.enable_regional_heart_models
+                                                            ? cfg_.fibrosis_volume_attrs
+                                                            : std::vector<int>{},
+                                                        cfg_.enable_regional_heart_models
+                                                            ? cfg_.fibrosis_sigma_scale
+                                                            : 1.0);
   k2_coeff_ = std::make_unique<FiberTensorCoefficient>(dim,
                                                         cfg_.sigma_i_f_mS_per_mm,
                                                         cfg_.sigma_i_s_mS_per_mm,
                                                         cfg_.sigma_i_n_mS_per_mm,
                                                         *f_coeff_,
                                                         *s_coeff_,
-                                                        *n_coeff_);
+                                                        *n_coeff_,
+                                                        cfg_.enable_regional_heart_models
+                                                            ? cfg_.fibrosis_volume_attrs
+                                                            : std::vector<int>{},
+                                                        cfg_.enable_regional_heart_models
+                                                            ? cfg_.fibrosis_sigma_scale
+                                                            : 1.0);
 
   k1_form_ = std::make_unique<mfem::ParBilinearForm>(&assembler_.PFES());
   k1_form_->AddDomainIntegrator(new mfem::DiffusionIntegrator(*k1_coeff_));
