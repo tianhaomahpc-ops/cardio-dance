@@ -43,6 +43,23 @@ use_petsc=0
 ksp_max_it=500
 ksp_rtol=1e-8
 
+# Electromechanics (Ca2+ driven active traction)
+enable_electromech=1
+mech_order=1
+mech_young_modulus=10.0
+mech_poisson_ratio=0.30
+mech_traction_x=1.0
+mech_traction_y=0.0
+mech_traction_z=0.0
+mech_ca_half_mM=0.0002
+mech_ca_hill=2.0
+mech_boundary_tolerance=1e-6
+mech_max_it=500
+mech_rtol=1e-10
+mech_atol=1e-14
+mech_print_level=0
+mech_output_subdir=heart/elasticity
+
 # Output: every 1ms because dt=0.005ms and stride=200
 output_stride=200
 checkpoint_stride=0

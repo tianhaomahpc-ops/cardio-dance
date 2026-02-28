@@ -94,6 +94,23 @@ struct SimulationConfig {
   int petsc_asm_ny = 1;
   int petsc_asm_nz = 1;
 
+  // Optional electromechanics post-processing (Ca2+ -> active traction -> displacement).
+  bool enable_electromech = false;
+  int mech_order = 1;
+  double mech_young_modulus = 10.0;
+  double mech_poisson_ratio = 0.30;
+  double mech_traction_x = 1.0;
+  double mech_traction_y = 0.0;
+  double mech_traction_z = 0.0;
+  double mech_ca_half_mM = 2e-4;
+  double mech_ca_hill = 2.0;
+  double mech_boundary_tolerance = 1e-6;
+  int mech_max_it = 500;
+  double mech_rtol = 1e-10;
+  double mech_atol = 1e-14;
+  int mech_print_level = 0;
+  std::string mech_output_subdir = "heart/elasticity";
+
   int output_stride = 20;
   int checkpoint_stride = 100;
   std::string output_dir = "output";

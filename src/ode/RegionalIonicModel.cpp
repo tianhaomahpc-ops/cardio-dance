@@ -45,6 +45,9 @@ RegionalIonicModel::RegionalIonicModel(const SimulationConfig& cfg,
   iion_atria_.SetSize(static_cast<int>(atria_nodes_.size()));
   iion_ventricles_.SetSize(static_cast<int>(ventricles_nodes_.size()));
   iion_fibrosis_.SetSize(static_cast<int>(fibrosis_nodes_.size()));
+  cai_atria_.SetSize(static_cast<int>(atria_nodes_.size()));
+  cai_ventricles_.SetSize(static_cast<int>(ventricles_nodes_.size()));
+  cai_fibrosis_.SetSize(static_cast<int>(fibrosis_nodes_.size()));
 }
 
 void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
@@ -170,6 +173,28 @@ void RegionalIonicModel::ComputeIion(const mfem::Vector& vm_true, mfem::Vector& 
   fibrosis_model_->ComputeIion(vm_fibrosis_, iion_fibrosis_);
   for (int i = 0; i < static_cast<int>(fibrosis_nodes_.size()); ++i) {
     iion_true[fibrosis_nodes_[static_cast<size_t>(i)]] = iion_fibrosis_[i];
+  }
+}
+
+void RegionalIonicModel::ComputeCytosolicCalcium(mfem::Vector& cai_true) const {
+  if (cai_true.Size() != n_nodes_) {
+    cai_true.SetSize(n_nodes_);
+  }
+  cai_true = 0.0;
+
+  atria_model_->ComputeCytosolicCalcium(cai_atria_);
+  for (int i = 0; i < static_cast<int>(atria_nodes_.size()); ++i) {
+    cai_true[atria_nodes_[static_cast<size_t>(i)]] = cai_atria_[i];
+  }
+
+  ventricles_model_->ComputeCytosolicCalcium(cai_ventricles_);
+  for (int i = 0; i < static_cast<int>(ventricles_nodes_.size()); ++i) {
+    cai_true[ventricles_nodes_[static_cast<size_t>(i)]] = cai_ventricles_[i];
+  }
+
+  fibrosis_model_->ComputeCytosolicCalcium(cai_fibrosis_);
+  for (int i = 0; i < static_cast<int>(fibrosis_nodes_.size()); ++i) {
+    cai_true[fibrosis_nodes_[static_cast<size_t>(i)]] = cai_fibrosis_[i];
   }
 }
 

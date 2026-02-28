@@ -60,6 +60,15 @@ void Grandi2011Model::ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iio
   }
 }
 
+void Grandi2011Model::ComputeCytosolicCalcium(mfem::Vector& cai_true) const {
+  if (cai_true.Size() != n_nodes_) {
+    cai_true.SetSize(n_nodes_);
+  }
+  for (int i = 0; i < n_nodes_; ++i) {
+    cai_true[i] = std::max(StatePtr(i)[11], 0.0); // Grandi2011 Ca_i
+  }
+}
+
 void Grandi2011Model::AdvanceStates(double dt_pde_ms,
                                     double dt_ode_ms,
                                     const mfem::Vector& vm_next_true) {

@@ -18,6 +18,13 @@ class IonicModel {
   virtual void SaveState(std::ostream& os) const = 0;
   virtual void LoadState(std::istream& is) = 0;
 
+  // Export cytosolic Ca2+ (mM) at local true dofs.
+  // Models without calcium states return zeros by default.
+  virtual void ComputeCytosolicCalcium(mfem::Vector& cai_true) const {
+    cai_true.SetSize(NumNodes());
+    cai_true = 0.0;
+  }
+
   virtual int NumNodes() const = 0;
   virtual const char* ModelTag() const = 0;
 };

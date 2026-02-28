@@ -15,6 +15,7 @@ class Grandi2011Model : public IonicModel {
 
   void InitializeRestState(double v_rest_mv) override;
   void ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true) const override;
+  void ComputeCytosolicCalcium(mfem::Vector& cai_true) const override;
   void AdvanceStates(double dt_pde_ms, double dt_ode_ms, const mfem::Vector& vm_next_true) override;
 
   void SaveState(std::ostream& os) const override;

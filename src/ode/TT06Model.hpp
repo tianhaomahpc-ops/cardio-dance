@@ -20,6 +20,7 @@ class TT06Model : public IonicModel {
   void InitializeRestState(double v_rest_mv) override;
   // Evaluate ionic current using current states and externally supplied Vm.
   void ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true) const override;
+  void ComputeCytosolicCalcium(mfem::Vector& cai_true) const override;
   // Advance ionic states over one PDE step using substepping dt_ode_ms.
   void AdvanceStates(double dt_pde_ms, double dt_ode_ms, const mfem::Vector& vm_next_true) override;
 

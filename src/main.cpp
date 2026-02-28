@@ -18,6 +18,7 @@
 #include "coupling/InterfaceMapper.hpp"
 #include "io/CheckpointIO.hpp"
 #include "io/OutputManager.hpp"
+#include "mechanics/CalciumDrivenElasticitySolver.hpp"
 #include "ode/Grandi2011Model.hpp"
 #include "ode/IonicModel.hpp"
 #include "ode/RegionalIonicModel.hpp"
@@ -155,9 +156,43 @@ int main(int argc, char* argv[]) {
       mono::CheckpointIO checkpoint(cfg, MPI_COMM_WORLD);
       const bool output_enabled = (cfg.output_stride > 0);
       const bool checkpoint_enabled = (cfg.checkpoint_stride > 0);
+      std::unique_ptr<mono::CalciumDrivenElasticitySolver> electromech_solver;
+      std::unique_ptr<mfem::ParaViewDataCollection> electromech_dc;
       std::ofstream ksp_log;
       std::ofstream timing_log;
       std::ofstream probe_vm_log;
+      std::ofstream electromech_log;
+
+      if (cfg.enable_electromech) {
+        if (!output_enabled) {
+          throw std::runtime_error("enable_electromech=1 requires output_stride > 0");
+        }
+        mono::CalciumDrivenElasticityOptions mech_opts;
+        mech_opts.elasticity.order = cfg.mech_order;
+        mech_opts.elasticity.young_modulus = cfg.mech_young_modulus;
+        mech_opts.elasticity.poisson_ratio = cfg.mech_poisson_ratio;
+        mech_opts.elasticity.traction_x = cfg.mech_traction_x;
+        mech_opts.elasticity.traction_y = cfg.mech_traction_y;
+        mech_opts.elasticity.traction_z = cfg.mech_traction_z;
+        mech_opts.elasticity.boundary_tolerance = cfg.mech_boundary_tolerance;
+        mech_opts.elasticity.max_iter = cfg.mech_max_it;
+        mech_opts.elasticity.rel_tol = cfg.mech_rtol;
+        mech_opts.elasticity.abs_tol = cfg.mech_atol;
+        mech_opts.elasticity.print_level = cfg.mech_print_level;
+        mech_opts.ca_half_mM = cfg.mech_ca_half_mM;
+        mech_opts.ca_hill = cfg.mech_ca_hill;
+
+        electromech_solver = std::make_unique<mono::CalciumDrivenElasticitySolver>(
+            MPI_COMM_WORLD, *assembler.PFES().GetParMesh(), assembler.TrueVSize(), mech_opts);
+        electromech_dc = std::make_unique<mfem::ParaViewDataCollection>(
+            "elasticity", &electromech_solver->Mesh());
+        electromech_dc->SetPrefixPath(
+            (std::filesystem::path(cfg.output_dir) / cfg.mech_output_subdir).string());
+        electromech_dc->SetHighOrderOutput(false);
+        electromech_dc->SetDataFormat(mfem::VTKFormat::BINARY);
+        electromech_dc->SetLevelsOfDetail(1);
+        electromech_dc->RegisterField("disp", &electromech_solver->Displacement());
+      }
 
       if (rank == 0) {
         std::filesystem::create_directories(cfg.output_dir);
@@ -182,6 +217,21 @@ int main(int argc, char* argv[]) {
         }
         ksp_log << std::setprecision(16);
         timing_log << std::setprecision(16);
+
+        if (cfg.enable_electromech) {
+          const std::filesystem::path mech_log_path =
+              std::filesystem::path(cfg.output_dir) / "electromech_history.csv";
+          const bool append_mech = restart_from_checkpoint && std::filesystem::exists(mech_log_path);
+          electromech_log.open(mech_log_path, append_mech ? std::ios::app : std::ios::trunc);
+          if (!electromech_log) {
+            throw std::runtime_error("failed to open electromech log file: " + mech_log_path.string());
+          }
+          if (!append_mech) {
+            electromech_log << "step,time_ms,calcium_mean_mM,activation,traction_x,traction_y,"
+                               "traction_z,cg_iterations,final_residual,disp_l2,disp_linf\n";
+          }
+          electromech_log << std::setprecision(16);
+        }
       }
 
       // 采用 rank 间 max 归约，记录并行瓶颈时间（最慢 rank）。
@@ -279,6 +329,35 @@ int main(int argc, char* argv[]) {
         }
         if (torso_iter != nullptr) {
           *torso_iter = torso_solver->LastNumIterations();
+        }
+      };
+
+      mono::CalciumDrivenElasticityStats last_electromech_stats;
+      auto solve_electromech = [&](double* solve_ms = nullptr) {
+        if (!cfg.enable_electromech) {
+          return;
+        }
+        using Clock = std::chrono::steady_clock;
+        mfem::Vector cai_true;
+        ionic_model->ComputeCytosolicCalcium(cai_true);
+        auto t0 = Clock::now();
+        last_electromech_stats = electromech_solver->SolveFromCytosolicCalcium(cai_true);
+        const double elapsed_ms =
+            std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+        if (solve_ms != nullptr) {
+          *solve_ms = elapsed_ms;
+        }
+        if (rank == 0 && electromech_log.is_open()) {
+          electromech_log << stepper.StepCount() << "," << stepper.TimeMs() << ","
+                          << last_electromech_stats.calcium_mean_mM << ","
+                          << last_electromech_stats.activation << ","
+                          << last_electromech_stats.traction_x << ","
+                          << last_electromech_stats.traction_y << ","
+                          << last_electromech_stats.traction_z << ","
+                          << last_electromech_stats.num_cg_iterations << ","
+                          << last_electromech_stats.final_residual_norm << ","
+                          << last_electromech_stats.displacement_l2_norm << ","
+                          << last_electromech_stats.displacement_max_abs << "\n";
         }
       };
 
@@ -490,11 +569,19 @@ int main(int argc, char* argv[]) {
 
         if (output_enabled) {
           auto io_t0 = Clock::now();
+          if (cfg.enable_electromech) {
+            solve_electromech();
+          }
           output.Save(stepper.StepCount(),
                       stepper.TimeMs(),
                       stepper.IionTrue(),
                       (cfg.enable_wholebody ? &ue_solver->UeTrue() : nullptr),
                       (cfg.enable_wholebody ? &torso_solver->UTTrue() : nullptr));
+          if (cfg.enable_electromech) {
+            electromech_dc->SetCycle(stepper.StepCount());
+            electromech_dc->SetTime(stepper.TimeMs());
+            electromech_dc->Save();
+          }
           output_ms_local = std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
 
@@ -542,11 +629,19 @@ int main(int argc, char* argv[]) {
 
         if (save_output_frame) {
           auto io_t0 = Clock::now();
+          if (cfg.enable_electromech) {
+            solve_electromech();
+          }
           output.Save(stepper.StepCount(),
                       stepper.TimeMs(),
                       stepper.IionTrue(),
                       (cfg.enable_wholebody ? &ue_solver->UeTrue() : nullptr),
                       (cfg.enable_wholebody ? &torso_solver->UTTrue() : nullptr));
+          if (cfg.enable_electromech) {
+            electromech_dc->SetCycle(stepper.StepCount());
+            electromech_dc->SetTime(stepper.TimeMs());
+            electromech_dc->Save();
+          }
           if (benchmark_probes) {
             write_probe_vm_row(stepper.TimeMs(), sample_probe_vm());
           }
@@ -616,11 +711,17 @@ int main(int argc, char* argv[]) {
       const FieldStats iion_stats = reduce_field_stats(stepper.IionTrue());
       FieldStats ue_stats;
       FieldStats ut_stats;
+      FieldStats disp_stats;
       if (cfg.enable_wholebody) {
         // whole-body 是 Vm 的后处理；这里补一次终值求解，保证终值统计与最终 Vm 对齐。
         solve_wholebody_potentials();
         ue_stats = reduce_field_stats(ue_solver->UeTrue());
         ut_stats = reduce_field_stats(torso_solver->UTTrue());
+      }
+      if (cfg.enable_electromech) {
+        mfem::Vector disp_true;
+        electromech_solver->Displacement().GetTrueDofs(disp_true);
+        disp_stats = reduce_field_stats(disp_true);
       }
 
       if (rank == 0) {
@@ -638,6 +739,17 @@ int main(int argc, char* argv[]) {
             std::cout << "[monodomain] uT stats: min=" << ut_stats.min
                       << ", max=" << ut_stats.max << ", mean=" << ut_stats.mean
                       << ", l2=" << ut_stats.l2 << std::endl;
+          }
+          if (cfg.enable_electromech) {
+            std::cout << "[electromech] disp stats: min=" << disp_stats.min
+                      << ", max=" << disp_stats.max << ", mean=" << disp_stats.mean
+                      << ", l2=" << disp_stats.l2 << std::endl;
+            std::cout << "[electromech] final calcium_mean(mM)="
+                      << last_electromech_stats.calcium_mean_mM
+                      << ", activation=" << last_electromech_stats.activation
+                      << ", traction=(" << last_electromech_stats.traction_x << ", "
+                      << last_electromech_stats.traction_y << ", "
+                      << last_electromech_stats.traction_z << ")" << std::endl;
           }
         }
         if (benchmark_probes) {

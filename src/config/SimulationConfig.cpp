@@ -192,6 +192,21 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "petsc_asm_nx") cfg.petsc_asm_nx = std::stoi(val);
     else if (key == "petsc_asm_ny") cfg.petsc_asm_ny = std::stoi(val);
     else if (key == "petsc_asm_nz") cfg.petsc_asm_nz = std::stoi(val);
+    else if (key == "enable_electromech") cfg.enable_electromech = ParseBool(val);
+    else if (key == "mech_order") cfg.mech_order = std::stoi(val);
+    else if (key == "mech_young_modulus") cfg.mech_young_modulus = std::stod(val);
+    else if (key == "mech_poisson_ratio") cfg.mech_poisson_ratio = std::stod(val);
+    else if (key == "mech_traction_x") cfg.mech_traction_x = std::stod(val);
+    else if (key == "mech_traction_y") cfg.mech_traction_y = std::stod(val);
+    else if (key == "mech_traction_z") cfg.mech_traction_z = std::stod(val);
+    else if (key == "mech_ca_half_mM") cfg.mech_ca_half_mM = std::stod(val);
+    else if (key == "mech_ca_hill") cfg.mech_ca_hill = std::stod(val);
+    else if (key == "mech_boundary_tolerance") cfg.mech_boundary_tolerance = std::stod(val);
+    else if (key == "mech_max_it") cfg.mech_max_it = std::stoi(val);
+    else if (key == "mech_rtol") cfg.mech_rtol = std::stod(val);
+    else if (key == "mech_atol") cfg.mech_atol = std::stod(val);
+    else if (key == "mech_print_level") cfg.mech_print_level = std::stoi(val);
+    else if (key == "mech_output_subdir") cfg.mech_output_subdir = val;
     else if (key == "output_stride") cfg.output_stride = std::stoi(val);
     else if (key == "checkpoint_stride") cfg.checkpoint_stride = std::stoi(val);
     else if (key == "output_dir") cfg.output_dir = val;
@@ -284,6 +299,32 @@ SimulationConfig LoadConfigFile(const std::string& path) {
   if (cfg.petsc_asm_nx <= 0 || cfg.petsc_asm_ny <= 0 || cfg.petsc_asm_nz <= 0) {
     throw std::runtime_error("petsc_asm_nx/petsc_asm_ny/petsc_asm_nz must be > 0");
   }
+  if (cfg.enable_electromech) {
+    if (cfg.mech_order < 1) {
+      throw std::runtime_error("mech_order must be >= 1");
+    }
+    if (cfg.mech_young_modulus <= 0.0) {
+      throw std::runtime_error("mech_young_modulus must be > 0");
+    }
+    if (cfg.mech_poisson_ratio <= -1.0 || cfg.mech_poisson_ratio >= 0.5) {
+      throw std::runtime_error("mech_poisson_ratio must be in (-1, 0.5)");
+    }
+    if (cfg.mech_ca_half_mM <= 0.0) {
+      throw std::runtime_error("mech_ca_half_mM must be > 0");
+    }
+    if (cfg.mech_ca_hill <= 0.0) {
+      throw std::runtime_error("mech_ca_hill must be > 0");
+    }
+    if (cfg.mech_max_it <= 0) {
+      throw std::runtime_error("mech_max_it must be > 0");
+    }
+    if (cfg.mech_rtol <= 0.0 || cfg.mech_atol <= 0.0) {
+      throw std::runtime_error("mech_rtol/mech_atol must be > 0");
+    }
+    if (cfg.mech_output_subdir.empty()) {
+      throw std::runtime_error("mech_output_subdir cannot be empty");
+    }
+  }
   return cfg;
 }
 
@@ -350,6 +391,21 @@ std::string ToString(const SimulationConfig& cfg) {
   oss << "petsc_asm_nx=" << cfg.petsc_asm_nx << "\n";
   oss << "petsc_asm_ny=" << cfg.petsc_asm_ny << "\n";
   oss << "petsc_asm_nz=" << cfg.petsc_asm_nz << "\n";
+  oss << "enable_electromech=" << (cfg.enable_electromech ? 1 : 0) << "\n";
+  oss << "mech_order=" << cfg.mech_order << "\n";
+  oss << "mech_young_modulus=" << cfg.mech_young_modulus << "\n";
+  oss << "mech_poisson_ratio=" << cfg.mech_poisson_ratio << "\n";
+  oss << "mech_traction_x=" << cfg.mech_traction_x << "\n";
+  oss << "mech_traction_y=" << cfg.mech_traction_y << "\n";
+  oss << "mech_traction_z=" << cfg.mech_traction_z << "\n";
+  oss << "mech_ca_half_mM=" << cfg.mech_ca_half_mM << "\n";
+  oss << "mech_ca_hill=" << cfg.mech_ca_hill << "\n";
+  oss << "mech_boundary_tolerance=" << cfg.mech_boundary_tolerance << "\n";
+  oss << "mech_max_it=" << cfg.mech_max_it << "\n";
+  oss << "mech_rtol=" << cfg.mech_rtol << "\n";
+  oss << "mech_atol=" << cfg.mech_atol << "\n";
+  oss << "mech_print_level=" << cfg.mech_print_level << "\n";
+  oss << "mech_output_subdir=" << cfg.mech_output_subdir << "\n";
   return oss.str();
 }
 

@@ -33,6 +33,14 @@ int main() {
     out << "petsc_asm_nx=2\n";
     out << "petsc_asm_ny=3\n";
     out << "petsc_asm_nz=4\n";
+    out << "enable_electromech=1\n";
+    out << "mech_order=2\n";
+    out << "mech_young_modulus=12.5\n";
+    out << "mech_poisson_ratio=0.29\n";
+    out << "mech_traction_x=0.8\n";
+    out << "mech_ca_half_mM=0.0003\n";
+    out << "mech_ca_hill=3.0\n";
+    out << "mech_output_subdir=heart/electromech\n";
     out << "use_petsc=0\n";
   }
 
@@ -54,6 +62,14 @@ int main() {
     if (!cfg.use_hypre_boomeramg) return 15;
     if (!cfg.petsc_use_geometric_asm) return 16;
     if (cfg.petsc_asm_nx != 2 || cfg.petsc_asm_ny != 3 || cfg.petsc_asm_nz != 4) return 17;
+    if (!cfg.enable_electromech) return 18;
+    if (cfg.mech_order != 2) return 19;
+    if (std::abs(cfg.mech_young_modulus - 12.5) > 1e-12) return 20;
+    if (std::abs(cfg.mech_poisson_ratio - 0.29) > 1e-12) return 21;
+    if (std::abs(cfg.mech_traction_x - 0.8) > 1e-12) return 22;
+    if (std::abs(cfg.mech_ca_half_mM - 3e-4) > 1e-12) return 23;
+    if (std::abs(cfg.mech_ca_hill - 3.0) > 1e-12) return 24;
+    if (cfg.mech_output_subdir != "heart/electromech") return 25;
   } catch (const std::exception& ex) {
     std::cerr << ex.what() << std::endl;
     return 10;

@@ -13,6 +13,7 @@ include(Dependencies)
 
 add_library(monodomain_core
   src/config/SimulationConfig.cpp
+  src/mechanics/CalciumDrivenElasticitySolver.cpp
   src/mechanics/ElasticitySolver.cpp
   src/ode/Grandi2011Model.cpp
   src/ode/PassiveModel.cpp
@@ -64,8 +65,10 @@ target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 add_executable(split_niederer_x_regions tools/split_niederer_x_regions.cpp)
 target_link_libraries(split_niederer_x_regions PRIVATE monodomain_core)
 
-add_executable(generate_regional_fibers tools/generate_regional_fibers.cpp)
-target_link_libraries(generate_regional_fibers PRIVATE monodomain_core)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_regional_fibers.cpp")
+  add_executable(generate_regional_fibers tools/generate_regional_fibers.cpp)
+  target_link_libraries(generate_regional_fibers PRIVATE monodomain_core)
+endif()
 
 add_executable(solve_elasticity tools/solve_elasticity.cpp)
 target_link_libraries(solve_elasticity PRIVATE monodomain_core)

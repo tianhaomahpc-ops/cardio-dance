@@ -97,6 +97,15 @@ void TT06Model::ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true
   }
 }
 
+void TT06Model::ComputeCytosolicCalcium(mfem::Vector& cai_true) const {
+  if (cai_true.Size() != n_nodes_) {
+    cai_true.SetSize(n_nodes_);
+  }
+  for (int i = 0; i < n_nodes_; ++i) {
+    cai_true[i] = std::max(StatePtr(i)[3], 0.0); // TT06 Ca_i
+  }
+}
+
 double TT06Model::RushLarsenUpdate(double x, double x_inf, double tau, double dt) {
   if (tau <= 1e-12 || !std::isfinite(tau)) {
     return x_inf;

@@ -24,6 +24,7 @@ class RegionalIonicModel : public IonicModel {
 
   void InitializeRestState(double v_rest_mv) override;
   void ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true) const override;
+  void ComputeCytosolicCalcium(mfem::Vector& cai_true) const override;
   void AdvanceStates(double dt_pde_ms, double dt_ode_ms, const mfem::Vector& vm_next_true) override;
 
   void SaveState(std::ostream& os) const override;
@@ -57,6 +58,9 @@ class RegionalIonicModel : public IonicModel {
   mutable mfem::Vector iion_atria_;
   mutable mfem::Vector iion_ventricles_;
   mutable mfem::Vector iion_fibrosis_;
+  mutable mfem::Vector cai_atria_;
+  mutable mfem::Vector cai_ventricles_;
+  mutable mfem::Vector cai_fibrosis_;
 };
 
 }  // namespace mono
