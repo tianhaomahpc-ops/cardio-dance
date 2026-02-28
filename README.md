@@ -149,6 +149,39 @@ For fiber fields from `.gf`, set:
 The three `.gf` files must match the simulation mesh and be vector grid functions with
 `vdim=mesh_dim` and `Ordering=byVDIM`.
 
+## Regional fibers (atria + ventricles)
+
+Generate regional `fiber_f/s/n.gf` on an existing 3D mesh:
+
+```bash
+mpirun -np 1 ./build/generate_regional_fibers \
+  --mesh benchmarks/wholebody/wholebody_conforming.mesh \
+  --out-dir benchmarks/wholebody/fibers_regional \
+  --atria-attrs 11 \
+  --atria-anchor CT:path,/path/to/ct.csv \
+  --atria-anchor BB:path,/path/to/bb.csv \
+  --atria-anchor LSPV:ring,/path/to/lspv.vtk \
+  --atria-anchor RSPV:ring,/path/to/rspv.vtk \
+  --ventricle-attrs 12 \
+  --vent-apex-bdr-attrs 1 \
+  --vent-base-bdr-attrs 2 \
+  --vent-epi-bdr-attrs 3 \
+  --vent-lv-bdr-attrs 4 \
+  --vent-rv-bdr-attrs 5
+```
+
+Notes:
+
+- Atria pipeline follows anchor-tagging -> anchor vector initialization -> volumetric diffusion
+  -> defect repair -> final orthonormalization.
+- CSV landmarks support optional affine preprocessing via `--csv-scale` and `--csv-shift`.
+- Ventricle pipeline follows the cardioid `fiberp` style: four Laplace-like scalar fields
+  (`psi_ab`, `phi_epi`, `phi_lv`, `phi_rv`) + bislerp-based orientation synthesis.
+- Output files are written to `--out-dir` as:
+  - `fiber_f.gf`
+  - `fiber_s.gf`
+  - `fiber_n.gf`
+
 ## Multi stimulus regions
 
 You can define multiple stimulus regions by repeating `stim_region=` in the options file.

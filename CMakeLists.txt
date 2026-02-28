@@ -63,6 +63,9 @@ target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 add_executable(split_niederer_x_regions tools/split_niederer_x_regions.cpp)
 target_link_libraries(split_niederer_x_regions PRIVATE monodomain_core)
 
+add_executable(generate_regional_fibers tools/generate_regional_fibers.cpp)
+target_link_libraries(generate_regional_fibers PRIVATE monodomain_core)
+
 add_executable(test_tt06_single_cell tests/test_tt06_single_cell.cpp)
 target_link_libraries(test_tt06_single_cell PRIVATE monodomain_core)
 add_test(NAME tt06_single_cell COMMAND test_tt06_single_cell)
