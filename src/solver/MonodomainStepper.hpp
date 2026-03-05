@@ -1,8 +1,11 @@
 #pragma once
 
+#include <memory>
+
 #include "config/SimulationConfig.hpp"
 #include "ode/IonicModel.hpp"
 #include "solver/LinearSolverFactory.hpp"
+#include "solver/PurkinjeSystem.hpp"
 #include "space/Assembler.hpp"
 
 namespace mono {
@@ -14,6 +17,7 @@ struct StepTimingBreakdown {
   double linear_solve_ms = 0.0;
   double sync_vm_ms = 0.0;
   double ode_advance_ms = 0.0;
+  double purkinje_ms = 0.0;
   double step_total_ms = 0.0;
 };
 
@@ -39,6 +43,12 @@ class MonodomainStepper {
 
   const mfem::Vector& VmTrue() const { return vm_n_; }
   const mfem::Vector& IionTrue() const { return iion_true_; }
+  bool HasPurkinje() const { return purkinje_ != nullptr; }
+  int PurkinjeNumNodes() const { return purkinje_ ? purkinje_->NumNodes() : 0; }
+  int GlobalNumMappedPvj() const { return purkinje_ ? purkinje_->GlobalNumMappedPvj() : 0; }
+  double GlobalMaxMappedPvjDistMm() const {
+    return purkinje_ ? purkinje_->GlobalMaxMappedPvjDistMm() : 0.0;
+  }
   // Timing from the most recent Bootstrap/StepNoCorrection call.
   const StepTimingBreakdown& LastTiming() const { return last_timing_; }
 
@@ -58,6 +68,8 @@ class MonodomainStepper {
   mfem::Vector tmp_;
   mfem::Vector stim_mask_true_;
   mfem::Vector stim_true_;
+  mfem::Vector pvj_current_true_;
+  std::unique_ptr<PurkinjeSystem> purkinje_;
   StepTimingBreakdown last_timing_;
 
   void BuildStimulusMask();

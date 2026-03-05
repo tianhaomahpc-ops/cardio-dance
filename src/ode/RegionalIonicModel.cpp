@@ -36,15 +36,20 @@ RegionalIonicModel::RegionalIonicModel(const SimulationConfig& cfg,
 
   atria_model_ = std::make_unique<Grandi2011Model>(static_cast<int>(atria_nodes_.size()));
   ventricles_model_ = std::make_unique<TT06Model>(static_cast<int>(ventricles_nodes_.size()));
+  const double passive_g = (cfg.passive_g_mS_per_uF > 0.0) ? cfg.passive_g_mS_per_uF : 6.0643e-4;
   fibrosis_model_ =
-      std::make_unique<PassiveModel>(static_cast<int>(fibrosis_nodes_.size()), -85.0, 6.0643e-4);
+      std::make_unique<PassiveModel>(static_cast<int>(fibrosis_nodes_.size()), -85.0, passive_g);
+  av_delay_model_ =
+      std::make_unique<PassiveModel>(static_cast<int>(av_delay_nodes_.size()), -85.0, passive_g);
 
   vm_atria_.SetSize(static_cast<int>(atria_nodes_.size()));
   vm_ventricles_.SetSize(static_cast<int>(ventricles_nodes_.size()));
   vm_fibrosis_.SetSize(static_cast<int>(fibrosis_nodes_.size()));
+  vm_av_delay_.SetSize(static_cast<int>(av_delay_nodes_.size()));
   iion_atria_.SetSize(static_cast<int>(atria_nodes_.size()));
   iion_ventricles_.SetSize(static_cast<int>(ventricles_nodes_.size()));
   iion_fibrosis_.SetSize(static_cast<int>(fibrosis_nodes_.size()));
+  iion_av_delay_.SetSize(static_cast<int>(av_delay_nodes_.size()));
 }
 
 void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
@@ -56,12 +61,14 @@ void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
   const auto atria_set = ToSet(cfg.atria_volume_attrs);
   const auto ventricles_set = ToSet(cfg.ventricles_volume_attrs);
   const auto fibrosis_set = ToSet(cfg.fibrosis_volume_attrs);
+  const auto av_delay_set = ToSet(cfg.av_delay_volume_attrs);
 
   if (atria_set.empty() || ventricles_set.empty() || fibrosis_set.empty()) {
     throw std::runtime_error("RegionalIonicModel requires non-empty atria/ventricles/fibrosis attrs");
   }
   if (Intersects(atria_set, ventricles_set) || Intersects(atria_set, fibrosis_set) ||
-      Intersects(ventricles_set, fibrosis_set)) {
+      Intersects(ventricles_set, fibrosis_set) || Intersects(av_delay_set, atria_set) ||
+      Intersects(av_delay_set, ventricles_set) || Intersects(av_delay_set, fibrosis_set)) {
     throw std::runtime_error("RegionalIonicModel attr sets must be disjoint");
   }
 
@@ -81,6 +88,8 @@ void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
       reg = Region::Atria;
     } else if (fibrosis_set.find(attr) != fibrosis_set.end()) {
       reg = Region::Fibrosis;
+    } else if (av_delay_set.find(attr) != av_delay_set.end()) {
+      reg = Region::AvDelay;
     } else {
       throw std::runtime_error("RegionalIonicModel found element attribute outside configured sets: " +
                                std::to_string(attr));
@@ -101,9 +110,11 @@ void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
   atria_nodes_.clear();
   ventricles_nodes_.clear();
   fibrosis_nodes_.clear();
+  av_delay_nodes_.clear();
   atria_nodes_.reserve(region_of_node_.size());
   ventricles_nodes_.reserve(region_of_node_.size());
   fibrosis_nodes_.reserve(region_of_node_.size());
+  av_delay_nodes_.reserve(region_of_node_.size());
 
   for (int i = 0; i < n_nodes_; ++i) {
     const Region reg = region_of_node_[static_cast<size_t>(i)];
@@ -117,19 +128,26 @@ void RegionalIonicModel::AssignRegionsFromMesh(const SimulationConfig& cfg,
       case Region::Fibrosis:
         fibrosis_nodes_.push_back(i);
         break;
+      case Region::AvDelay:
+        av_delay_nodes_.push_back(i);
+        break;
       case Region::Unknown:
       default:
         throw std::runtime_error("RegionalIonicModel found unassigned true dof");
     }
   }
 
-  int local_counts[3] = {static_cast<int>(atria_nodes_.size()),
+  int local_counts[4] = {static_cast<int>(atria_nodes_.size()),
                          static_cast<int>(ventricles_nodes_.size()),
-                         static_cast<int>(fibrosis_nodes_.size())};
-  int global_counts[3] = {0, 0, 0};
-  MPI_Allreduce(local_counts, global_counts, 3, MPI_INT, MPI_SUM, pfes.GetComm());
+                         static_cast<int>(fibrosis_nodes_.size()),
+                         static_cast<int>(av_delay_nodes_.size())};
+  int global_counts[4] = {0, 0, 0, 0};
+  MPI_Allreduce(local_counts, global_counts, 4, MPI_INT, MPI_SUM, pfes.GetComm());
   if (global_counts[0] <= 0 || global_counts[1] <= 0 || global_counts[2] <= 0) {
     throw std::runtime_error("RegionalIonicModel requires non-empty global node sets for all regions");
+  }
+  if (!av_delay_set.empty() && global_counts[3] <= 0) {
+    throw std::runtime_error("RegionalIonicModel av_delay_volume_attrs has no mapped nodes");
   }
 }
 
@@ -137,6 +155,7 @@ void RegionalIonicModel::InitializeRestState(double v_rest_mv) {
   atria_model_->InitializeRestState(v_rest_mv);
   ventricles_model_->InitializeRestState(v_rest_mv);
   fibrosis_model_->InitializeRestState(v_rest_mv);
+  av_delay_model_->InitializeRestState(v_rest_mv);
 }
 
 void RegionalIonicModel::ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true) const {
@@ -171,6 +190,14 @@ void RegionalIonicModel::ComputeIion(const mfem::Vector& vm_true, mfem::Vector& 
   for (int i = 0; i < static_cast<int>(fibrosis_nodes_.size()); ++i) {
     iion_true[fibrosis_nodes_[static_cast<size_t>(i)]] = iion_fibrosis_[i];
   }
+
+  for (int i = 0; i < static_cast<int>(av_delay_nodes_.size()); ++i) {
+    vm_av_delay_[i] = vm_true[av_delay_nodes_[static_cast<size_t>(i)]];
+  }
+  av_delay_model_->ComputeIion(vm_av_delay_, iion_av_delay_);
+  for (int i = 0; i < static_cast<int>(av_delay_nodes_.size()); ++i) {
+    iion_true[av_delay_nodes_[static_cast<size_t>(i)]] = iion_av_delay_[i];
+  }
 }
 
 void RegionalIonicModel::AdvanceStates(double dt_pde_ms,
@@ -194,6 +221,11 @@ void RegionalIonicModel::AdvanceStates(double dt_pde_ms,
     vm_fibrosis_[i] = vm_next_true[fibrosis_nodes_[static_cast<size_t>(i)]];
   }
   fibrosis_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_fibrosis_);
+
+  for (int i = 0; i < static_cast<int>(av_delay_nodes_.size()); ++i) {
+    vm_av_delay_[i] = vm_next_true[av_delay_nodes_[static_cast<size_t>(i)]];
+  }
+  av_delay_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_av_delay_);
 }
 
 void RegionalIonicModel::SaveState(std::ostream& os) const {
@@ -208,6 +240,10 @@ void RegionalIonicModel::SaveState(std::ostream& os) const {
   atria_model_->SaveState(os);
   ventricles_model_->SaveState(os);
   fibrosis_model_->SaveState(os);
+  av_delay_model_->SaveState(os);
+  if (!os) {
+    throw std::runtime_error("RegionalIonicModel::SaveState failed to write data");
+  }
 }
 
 void RegionalIonicModel::LoadState(std::istream& is) {
@@ -231,6 +267,7 @@ void RegionalIonicModel::LoadState(std::istream& is) {
   atria_model_->LoadState(is);
   ventricles_model_->LoadState(is);
   fibrosis_model_->LoadState(is);
+  av_delay_model_->LoadState(is);
   if (!is) {
     throw std::runtime_error("RegionalIonicModel::LoadState failed to read data");
   }

@@ -18,6 +18,7 @@ namespace mono {
 //   atria -> Grandi2011
 //   ventricles -> TT06
 //   fibrosis -> Passive
+//   av_delay -> Passive (slow nodal bridge surrogate)
 class RegionalIonicModel : public IonicModel {
  public:
   RegionalIonicModel(const SimulationConfig& cfg, const mfem::ParFiniteElementSpace& pfes);
@@ -33,7 +34,7 @@ class RegionalIonicModel : public IonicModel {
   const char* ModelTag() const override { return "REGIONAL_V1"; }
 
  private:
-  enum class Region : uint8_t { Unknown = 0, Fibrosis = 1, Atria = 2, Ventricles = 3 };
+  enum class Region : uint8_t { Unknown = 0, Fibrosis = 1, Atria = 2, Ventricles = 3, AvDelay = 4 };
 
   static Region PriorityMax(Region a, Region b) {
     return (static_cast<int>(a) >= static_cast<int>(b)) ? a : b;
@@ -46,10 +47,12 @@ class RegionalIonicModel : public IonicModel {
   std::vector<int> atria_nodes_;
   std::vector<int> ventricles_nodes_;
   std::vector<int> fibrosis_nodes_;
+  std::vector<int> av_delay_nodes_;
 
   std::unique_ptr<Grandi2011Model> atria_model_;
   std::unique_ptr<TT06Model> ventricles_model_;
   std::unique_ptr<PassiveModel> fibrosis_model_;
+  std::unique_ptr<PassiveModel> av_delay_model_;
 
   mutable mfem::Vector vm_atria_;
   mutable mfem::Vector vm_ventricles_;
@@ -57,6 +60,8 @@ class RegionalIonicModel : public IonicModel {
   mutable mfem::Vector iion_atria_;
   mutable mfem::Vector iion_ventricles_;
   mutable mfem::Vector iion_fibrosis_;
+  mutable mfem::Vector vm_av_delay_;
+  mutable mfem::Vector iion_av_delay_;
 };
 
 }  // namespace mono

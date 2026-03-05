@@ -20,7 +20,9 @@ class FiberTensorCoefficient : public mfem::MatrixCoefficient {
                          mfem::VectorCoefficient& s_coeff,
                          mfem::VectorCoefficient& n_coeff,
                          const std::vector<int>& fibrosis_attrs = {},
-                         double fibrosis_scale = 1.0);
+                         double fibrosis_scale = 1.0,
+                         const std::vector<int>& av_delay_attrs = {},
+                         double av_delay_scale = 1.0);
 
   void Eval(mfem::DenseMatrix& K,
             mfem::ElementTransformation& T,
@@ -35,6 +37,8 @@ class FiberTensorCoefficient : public mfem::MatrixCoefficient {
   mfem::VectorCoefficient& n_coeff_;
   std::unordered_set<int> fibrosis_attrs_;
   double fibrosis_scale_ = 1.0;
+  std::unordered_set<int> av_delay_attrs_;
+  double av_delay_scale_ = 1.0;
 
   static void Normalize(mfem::Vector& v, const mfem::Vector& fallback);
 };

@@ -46,10 +46,16 @@ MonodomainStepper::MonodomainStepper(const SimulationConfig& cfg,
   tmp_.SetSize(n);
   stim_mask_true_.SetSize(n);
   stim_true_.SetSize(n);
+  pvj_current_true_.SetSize(n);
+  pvj_current_true_ = 0.0;
 
   assembler_.Vm().GetTrueDofs(vm_n_);
   linear_solver_.SetOperator(assembler_.A());
   BuildStimulusMask();
+  if (cfg_.enable_purkinje) {
+    purkinje_ = std::make_unique<PurkinjeSystem>(cfg_, assembler_.PFES());
+    purkinje_->Initialize(cfg_.purkinje_rest_mv);
+  }
 }
 
 void MonodomainStepper::InitializeVm(double v_init_mv) {
@@ -154,6 +160,11 @@ void MonodomainStepper::BuildRhs(double t_mid_ms) {
   BuildStimulus(t_mid_ms);
   assembler_.M().Mult(stim_true_, tmp_);
   rhs_.Add(-react_scale, tmp_);
+
+  if (purkinje_) {
+    assembler_.M().Mult(pvj_current_true_, tmp_);
+    rhs_.Add(-react_scale, tmp_);
+  }
 }
 
 void MonodomainStepper::SyncVmToGridFunction(const mfem::Vector& vm_true) {
@@ -163,6 +174,7 @@ void MonodomainStepper::SyncVmToGridFunction(const mfem::Vector& vm_true) {
 void MonodomainStepper::Bootstrap() {
   using Clock = std::chrono::steady_clock;
   auto t0 = Clock::now();
+  last_timing_ = StepTimingBreakdown{};
 
   // 1) Evaluate ionic source at V^n/state^n.
   auto t_begin = Clock::now();
@@ -175,6 +187,16 @@ void MonodomainStepper::Bootstrap() {
   ionic_model_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
   t_end = Clock::now();
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+
+  // 2.5) Purkinje->myocardium coupling current at V^n.
+  t_begin = Clock::now();
+  if (purkinje_) {
+    purkinje_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+  } else {
+    pvj_current_true_ = 0.0;
+  }
+  t_end = Clock::now();
+  last_timing_.purkinje_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 3) Build RHS with current ionic source.
   t_begin = Clock::now();
@@ -195,6 +217,14 @@ void MonodomainStepper::Bootstrap() {
   t_end = Clock::now();
   last_timing_.sync_vm_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
+  // 6) Advance Purkinje states with updated myocardial Vm.
+  t_begin = Clock::now();
+  if (purkinje_) {
+    purkinje_->Advance(cfg_.dt_pde_ms, vm_np1_, 0.5 * cfg_.dt_pde_ms);
+  }
+  t_end = Clock::now();
+  last_timing_.purkinje_ms += std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+
   vm_n_ = vm_np1_;
   t_ms_ = cfg_.dt_pde_ms;
   step_ = 1;
@@ -204,6 +234,7 @@ void MonodomainStepper::Bootstrap() {
 void MonodomainStepper::StepNoCorrection() {
   using Clock = std::chrono::steady_clock;
   auto t0 = Clock::now();
+  last_timing_ = StepTimingBreakdown{};
 
   // 1) I_ion(V^n, state^n)
   auto t_begin = Clock::now();
@@ -218,6 +249,16 @@ void MonodomainStepper::StepNoCorrection() {
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   const double t_mid = t_ms_ + 0.5 * cfg_.dt_pde_ms;
+
+  // 2.5) Purkinje->myocardium coupling current at V^n.
+  t_begin = Clock::now();
+  if (purkinje_) {
+    purkinje_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+  } else {
+    pvj_current_true_ = 0.0;
+  }
+  t_end = Clock::now();
+  last_timing_.purkinje_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 3) Build split RHS.
   t_begin = Clock::now();
@@ -237,6 +278,14 @@ void MonodomainStepper::StepNoCorrection() {
   SyncVmToGridFunction(vm_np1_);
   t_end = Clock::now();
   last_timing_.sync_vm_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+
+  // 6) Advance Purkinje states with updated myocardial Vm.
+  t_begin = Clock::now();
+  if (purkinje_) {
+    purkinje_->Advance(cfg_.dt_pde_ms, vm_np1_, t_mid);
+  }
+  t_end = Clock::now();
+  last_timing_.purkinje_ms += std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   vm_n_ = vm_np1_;
   t_ms_ += cfg_.dt_pde_ms;

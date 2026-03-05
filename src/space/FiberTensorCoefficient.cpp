@@ -12,7 +12,9 @@ FiberTensorCoefficient::FiberTensorCoefficient(int dim,
                                                mfem::VectorCoefficient& s_coeff,
                                                mfem::VectorCoefficient& n_coeff,
                                                const std::vector<int>& fibrosis_attrs,
-                                               double fibrosis_scale)
+                                               double fibrosis_scale,
+                                               const std::vector<int>& av_delay_attrs,
+                                               double av_delay_scale)
     : mfem::MatrixCoefficient(dim),
       sigma_f_(sigma_f),
       sigma_s_(sigma_s),
@@ -21,7 +23,9 @@ FiberTensorCoefficient::FiberTensorCoefficient(int dim,
       s_coeff_(s_coeff),
       n_coeff_(n_coeff),
       fibrosis_attrs_(fibrosis_attrs.begin(), fibrosis_attrs.end()),
-      fibrosis_scale_(fibrosis_scale) {}
+      fibrosis_scale_(fibrosis_scale),
+      av_delay_attrs_(av_delay_attrs.begin(), av_delay_attrs.end()),
+      av_delay_scale_(av_delay_scale) {}
 
 void FiberTensorCoefficient::Normalize(mfem::Vector& v, const mfem::Vector& fallback) {
   const double n = v.Norml2();
@@ -60,6 +64,9 @@ void FiberTensorCoefficient::Eval(mfem::DenseMatrix& K,
   if (!fibrosis_attrs_.empty() && T.Attribute > 0 &&
       fibrosis_attrs_.find(T.Attribute) != fibrosis_attrs_.end()) {
     scale = fibrosis_scale_;
+  } else if (!av_delay_attrs_.empty() && T.Attribute > 0 &&
+             av_delay_attrs_.find(T.Attribute) != av_delay_attrs_.end()) {
+    scale = av_delay_scale_;
   }
   const double sigma_f = sigma_f_ * scale;
   const double sigma_s = sigma_s_ * scale;

@@ -98,7 +98,9 @@ void Assembler::InitializeFiberCoefficients(int dim) {
                                                              : std::vector<int>{},
                                                          cfg_.enable_regional_heart_models
                                                              ? cfg_.fibrosis_sigma_scale
-                                                             : 1.0);
+                                                             : 1.0,
+                                                         cfg_.av_delay_volume_attrs,
+                                                         cfg_.av_delay_sigma_scale);
     use_loaded_fibers_ = false;
     return;
   }
@@ -155,7 +157,9 @@ void Assembler::InitializeFiberCoefficients(int dim) {
                                                            : std::vector<int>{},
                                                        cfg_.enable_regional_heart_models
                                                            ? cfg_.fibrosis_sigma_scale
-                                                           : 1.0);
+                                                           : 1.0,
+                                                       cfg_.av_delay_volume_attrs,
+                                                       cfg_.av_delay_sigma_scale);
   use_loaded_fibers_ = true;
 }
 

@@ -169,6 +169,24 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "ventricles_volume_attrs") cfg.ventricles_volume_attrs = ParseIntList(val);
     else if (key == "fibrosis_volume_attrs") cfg.fibrosis_volume_attrs = ParseIntList(val);
     else if (key == "fibrosis_sigma_scale") cfg.fibrosis_sigma_scale = std::stod(val);
+    else if (key == "av_delay_volume_attrs") cfg.av_delay_volume_attrs = ParseIntList(val);
+    else if (key == "av_delay_sigma_scale") cfg.av_delay_sigma_scale = std::stod(val);
+    else if (key == "use_passive_model") cfg.use_passive_model = ParseBool(val);
+    else if (key == "passive_g_mS_per_uF") cfg.passive_g_mS_per_uF = std::stod(val);
+    else if (key == "enable_purkinje") cfg.enable_purkinje = ParseBool(val);
+    else if (key == "purkinje_network_path") cfg.purkinje_network_path = val;
+    else if (key == "purkinje_cm_uF_per_mm") cfg.purkinje_cm_uF_per_mm = std::stod(val);
+    else if (key == "purkinje_edge_g_mS") cfg.purkinje_edge_g_mS = std::stod(val);
+    else if (key == "purkinje_leak_g_mS") cfg.purkinje_leak_g_mS = std::stod(val);
+    else if (key == "purkinje_rest_mv") cfg.purkinje_rest_mv = std::stod(val);
+    else if (key == "purkinje_dt_ms") cfg.purkinje_dt_ms = std::stod(val);
+    else if (key == "pvj_g_mS") cfg.pvj_g_mS = std::stod(val);
+    else if (key == "pvj_max_dist_mm") cfg.pvj_max_dist_mm = std::stod(val);
+    else if (key == "pvj_current_scale") cfg.pvj_current_scale = std::stod(val);
+    else if (key == "purkinje_stim_start_ms") cfg.purkinje_stim_start_ms = std::stod(val);
+    else if (key == "purkinje_stim_end_ms") cfg.purkinje_stim_end_ms = std::stod(val);
+    else if (key == "purkinje_stim_amp") cfg.purkinje_stim_amp = std::stod(val);
+    else if (key == "purkinje_stim_nodes") cfg.purkinje_stim_nodes = ParseIntList(val);
     else if (key == "dt_pde_ms") cfg.dt_pde_ms = std::stod(val);
     else if (key == "dt_ode_ms") cfg.dt_ode_ms = std::stod(val);
     else if (key == "t_end_ms") cfg.t_end_ms = std::stod(val);
@@ -188,6 +206,7 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "wholebody_solve_every_step") cfg.wholebody_solve_every_step = ParseBool(val);
     else if (key == "ksp_max_it") cfg.ksp_max_it = std::stoi(val);
     else if (key == "ksp_rtol") cfg.ksp_rtol = std::stod(val);
+    else if (key == "petsc_use_femheart_solver") cfg.petsc_use_femheart_solver = ParseBool(val);
     else if (key == "petsc_use_geometric_asm") cfg.petsc_use_geometric_asm = ParseBool(val);
     else if (key == "petsc_asm_nx") cfg.petsc_asm_nx = std::stoi(val);
     else if (key == "petsc_asm_ny") cfg.petsc_asm_ny = std::stoi(val);
@@ -243,6 +262,7 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     insert_unique(cfg.atria_volume_attrs, "atria_volume_attrs");
     insert_unique(cfg.ventricles_volume_attrs, "ventricles_volume_attrs");
     insert_unique(cfg.fibrosis_volume_attrs, "fibrosis_volume_attrs");
+    insert_unique(cfg.av_delay_volume_attrs, "av_delay_volume_attrs");
 
     if (cfg.enable_wholebody && cfg.use_conforming_wholebody) {
       std::unordered_set<int> heart(cfg.heart_volume_attrs.begin(), cfg.heart_volume_attrs.end());
@@ -284,6 +304,43 @@ SimulationConfig LoadConfigFile(const std::string& path) {
   if (cfg.petsc_asm_nx <= 0 || cfg.petsc_asm_ny <= 0 || cfg.petsc_asm_nz <= 0) {
     throw std::runtime_error("petsc_asm_nx/petsc_asm_ny/petsc_asm_nz must be > 0");
   }
+  if (cfg.passive_g_mS_per_uF < 0.0) {
+    throw std::runtime_error("passive_g_mS_per_uF must be >= 0");
+  }
+  if (cfg.av_delay_sigma_scale <= 0.0) {
+    throw std::runtime_error("av_delay_sigma_scale must be > 0");
+  }
+  if (cfg.enable_purkinje) {
+    if (cfg.purkinje_network_path.empty()) {
+      throw std::runtime_error("enable_purkinje=1 requires purkinje_network_path");
+    }
+    if (cfg.purkinje_cm_uF_per_mm <= 0.0) {
+      throw std::runtime_error("purkinje_cm_uF_per_mm must be > 0");
+    }
+    if (cfg.purkinje_edge_g_mS <= 0.0) {
+      throw std::runtime_error("purkinje_edge_g_mS must be > 0");
+    }
+    if (cfg.purkinje_leak_g_mS < 0.0) {
+      throw std::runtime_error("purkinje_leak_g_mS must be >= 0");
+    }
+    if (cfg.purkinje_dt_ms <= 0.0 || cfg.purkinje_dt_ms > cfg.dt_pde_ms) {
+      throw std::runtime_error("purkinje_dt_ms must satisfy 0 < purkinje_dt_ms <= dt_pde_ms");
+    }
+    if (cfg.pvj_g_mS < 0.0) {
+      throw std::runtime_error("pvj_g_mS must be >= 0");
+    }
+    if (cfg.pvj_max_dist_mm <= 0.0) {
+      throw std::runtime_error("pvj_max_dist_mm must be > 0");
+    }
+    if (cfg.pvj_current_scale <= 0.0) {
+      throw std::runtime_error("pvj_current_scale must be > 0");
+    }
+    for (const int node : cfg.purkinje_stim_nodes) {
+      if (node < 0) {
+        throw std::runtime_error("purkinje_stim_nodes must be non-negative");
+      }
+    }
+  }
   return cfg;
 }
 
@@ -293,6 +350,8 @@ void OverrideFromArgs(int argc, char* argv[], SimulationConfig& cfg) {
     const std::string arg = argv[i];
     if (arg == "--use-petsc" && i + 1 < argc) {
       cfg.use_petsc = (std::stoi(argv[++i]) != 0);
+    } else if (arg == "--petsc-femheart-solver" && i + 1 < argc) {
+      cfg.petsc_use_femheart_solver = (std::stoi(argv[++i]) != 0);
     } else if (arg == "--t-end" && i + 1 < argc) {
       cfg.t_end_ms = std::stod(argv[++i]);
     } else if (arg == "--dt" && i + 1 < argc) {
@@ -331,6 +390,20 @@ std::string ToString(const SimulationConfig& cfg) {
   oss << "ventricles_volume_attrs=" << cfg.ventricles_volume_attrs.size() << "\n";
   oss << "fibrosis_volume_attrs=" << cfg.fibrosis_volume_attrs.size() << "\n";
   oss << "fibrosis_sigma_scale=" << cfg.fibrosis_sigma_scale << "\n";
+  oss << "av_delay_volume_attrs=" << cfg.av_delay_volume_attrs.size() << "\n";
+  oss << "av_delay_sigma_scale=" << cfg.av_delay_sigma_scale << "\n";
+  oss << "use_passive_model=" << (cfg.use_passive_model ? 1 : 0) << "\n";
+  oss << "passive_g_mS_per_uF=" << cfg.passive_g_mS_per_uF << "\n";
+  oss << "enable_purkinje=" << (cfg.enable_purkinje ? 1 : 0) << "\n";
+  oss << "purkinje_network_path=" << cfg.purkinje_network_path << "\n";
+  oss << "purkinje_cm_uF_per_mm=" << cfg.purkinje_cm_uF_per_mm << "\n";
+  oss << "purkinje_edge_g_mS=" << cfg.purkinje_edge_g_mS << "\n";
+  oss << "purkinje_leak_g_mS=" << cfg.purkinje_leak_g_mS << "\n";
+  oss << "purkinje_dt_ms=" << cfg.purkinje_dt_ms << "\n";
+  oss << "pvj_g_mS=" << cfg.pvj_g_mS << "\n";
+  oss << "pvj_max_dist_mm=" << cfg.pvj_max_dist_mm << "\n";
+  oss << "pvj_current_scale=" << cfg.pvj_current_scale << "\n";
+  oss << "purkinje_stim_nodes=" << cfg.purkinje_stim_nodes.size() << "\n";
   oss << "dt_pde_ms=" << cfg.dt_pde_ms << "\n";
   oss << "dt_ode_ms=" << cfg.dt_ode_ms << "\n";
   oss << "t_end_ms=" << cfg.t_end_ms << "\n";
@@ -346,6 +419,7 @@ std::string ToString(const SimulationConfig& cfg) {
   oss << "wholebody_solve_every_step=" << (cfg.wholebody_solve_every_step ? 1 : 0) << "\n";
   oss << "ksp_max_it=" << cfg.ksp_max_it << "\n";
   oss << "ksp_rtol=" << cfg.ksp_rtol << "\n";
+  oss << "petsc_use_femheart_solver=" << (cfg.petsc_use_femheart_solver ? 1 : 0) << "\n";
   oss << "petsc_use_geometric_asm=" << (cfg.petsc_use_geometric_asm ? 1 : 0) << "\n";
   oss << "petsc_asm_nx=" << cfg.petsc_asm_nx << "\n";
   oss << "petsc_asm_ny=" << cfg.petsc_asm_ny << "\n";

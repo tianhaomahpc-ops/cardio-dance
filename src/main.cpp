@@ -20,6 +20,7 @@
 #include "io/OutputManager.hpp"
 #include "ode/Grandi2011Model.hpp"
 #include "ode/IonicModel.hpp"
+#include "ode/PassiveModel.hpp"
 #include "ode/RegionalIonicModel.hpp"
 #include "ode/TT06Model.hpp"
 #include "solver/ExtracellularRecoverySolver.hpp"
@@ -118,6 +119,9 @@ int main(int argc, char* argv[]) {
       std::unique_ptr<mono::IonicModel> ionic_model;
       if (cfg.enable_regional_heart_models) {
         ionic_model = std::make_unique<mono::RegionalIonicModel>(cfg, assembler.PFES());
+      } else if (cfg.use_passive_model) {
+        ionic_model = std::make_unique<mono::PassiveModel>(
+            assembler.TrueVSize(), -85.23, cfg.passive_g_mS_per_uF);
       } else {
         ionic_model = std::make_unique<mono::TT06Model>(assembler.TrueVSize());
       }
@@ -125,6 +129,11 @@ int main(int argc, char* argv[]) {
 
       mono::LinearSystemSolver linear_solver(cfg, MPI_COMM_WORLD, &assembler.PFES());
       mono::MonodomainStepper stepper(cfg, assembler, *ionic_model, linear_solver);
+      if (rank == 0 && stepper.HasPurkinje()) {
+        std::cout << "[purkinje] nodes=" << stepper.PurkinjeNumNodes()
+                  << ", mapped_pvj=" << stepper.GlobalNumMappedPvj()
+                  << ", max_pvj_dist_mm=" << stepper.GlobalMaxMappedPvjDistMm() << std::endl;
+      }
 
       std::unique_ptr<mono::ExtracellularRecoverySolver> ue_solver;
       std::unique_ptr<mono::TorsoPotentialSolver> torso_solver;
@@ -177,7 +186,7 @@ int main(int argc, char* argv[]) {
         if (!append_mode) {
           ksp_log << "step,time_ms,iterations,final_norm,solver\n";
           timing_log << "step,time_ms,solver_step_total_ms,iion_ms,rhs_ms,linear_solve_ms,"
-                        "sync_vm_ms,ode_advance_ms,other_ms,ue_solve_ms,map_ms,torso_solve_ms,"
+                        "sync_vm_ms,ode_advance_ms,purkinje_ms,other_ms,ue_solve_ms,map_ms,torso_solve_ms,"
                         "ue_iterations,torso_iterations,output_ms,checkpoint_ms\n";
         }
         ksp_log << std::setprecision(16);
@@ -207,7 +216,8 @@ int main(int argc, char* argv[]) {
         const mono::StepTimingBreakdown& t = stepper.LastTiming();
         double other_ms_local =
             t.step_total_ms -
-            (t.iion_ms + t.rhs_ms + t.linear_solve_ms + t.sync_vm_ms + t.ode_advance_ms);
+            (t.iion_ms + t.rhs_ms + t.linear_solve_ms + t.sync_vm_ms + t.ode_advance_ms +
+             t.purkinje_ms);
         if (other_ms_local < 0.0) {
           other_ms_local = 0.0;
         }
@@ -218,6 +228,7 @@ int main(int argc, char* argv[]) {
         const double linear_solve_ms = reduce_max(t.linear_solve_ms);
         const double sync_vm_ms = reduce_max(t.sync_vm_ms);
         const double ode_advance_ms = reduce_max(t.ode_advance_ms);
+        const double purkinje_ms = reduce_max(t.purkinje_ms);
         const double other_ms = reduce_max(other_ms_local);
         const double ue_solve_ms = reduce_max(ue_solve_ms_local);
         const double map_ms = reduce_max(map_ms_local);
@@ -235,7 +246,8 @@ int main(int argc, char* argv[]) {
         if (rank == 0 && timing_log.is_open()) {
           timing_log << stepper.StepCount() << "," << stepper.TimeMs() << "," << step_total_ms
                      << "," << iion_ms << "," << rhs_ms << "," << linear_solve_ms << ","
-                     << sync_vm_ms << "," << ode_advance_ms << "," << other_ms << ","
+                     << sync_vm_ms << "," << ode_advance_ms << "," << purkinje_ms << ","
+                     << other_ms << ","
                      << ue_solve_ms << "," << map_ms << "," << torso_solve_ms << ","
                      << ue_iter << "," << torso_iter << ","
                      << output_ms << "," << checkpoint_ms << "\n";
@@ -306,6 +318,7 @@ int main(int argc, char* argv[]) {
             {"P8", {20.0, 7.0, 3.0}},
             {"P9", {10.0, 3.5, 1.5}},
             {"Atria", {4.5, 3.5, 1.5}},
+            {"AVDelay", {8.2, 3.5, 1.5}},
             {"Fibrosis", {10.0, 3.5, 1.5}},
             {"Ventricle", {15.0, 3.5, 1.5}},
         };

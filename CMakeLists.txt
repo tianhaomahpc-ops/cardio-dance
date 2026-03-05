@@ -22,6 +22,7 @@ add_library(monodomain_core
   src/space/Assembler.cpp
   src/solver/LinearSolverFactory.cpp
   src/solver/MonodomainStepper.cpp
+  src/solver/PurkinjeSystem.cpp
   src/solver/ExtracellularRecoverySolver.cpp
   src/solver/TorsoPotentialSolver.cpp
   src/coupling/InterfaceMapper.cpp
@@ -62,6 +63,9 @@ target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 
 add_executable(split_niederer_x_regions tools/split_niederer_x_regions.cpp)
 target_link_libraries(split_niederer_x_regions PRIVATE monodomain_core)
+
+add_executable(split_niederer_x_regions_av tools/split_niederer_x_regions_av.cpp)
+target_link_libraries(split_niederer_x_regions_av PRIVATE monodomain_core)
 
 add_executable(test_tt06_single_cell tests/test_tt06_single_cell.cpp)
 target_link_libraries(test_tt06_single_cell PRIVATE monodomain_core)

@@ -1,0 +1,67 @@
+# Generate required mesh first:
+# mpirun -np 1 ./build/split_niederer_x_regions_av \
+#   --in-mesh benchmarks/niederer/niederer_benchmark.mesh \
+#   --out-mesh benchmarks/niederer/niederer_purkinje_avdelay.mesh
+
+mesh_path=benchmarks/niederer/niederer_purkinje_avdelay.mesh
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# Regional setup: two active cell types (atria + ventricle)
+# plus low-conductivity bridge (fibrosis attr=13) and AV delay region (attr=14).
+enable_regional_heart_models=1
+atria_volume_attrs=11
+ventricles_volume_attrs=12
+fibrosis_volume_attrs=13
+fibrosis_sigma_scale=0.08
+av_delay_volume_attrs=14
+av_delay_sigma_scale=0.02
+passive_g_mS_per_uF=0.0006
+
+# Monodomain material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# 1D Purkinje + PVJ
+enable_purkinje=1
+purkinje_network_path=config/purkinje_v.network
+purkinje_cm_uF_per_mm=0.01
+purkinje_edge_g_mS=0.2
+purkinje_leak_g_mS=0.02
+purkinje_rest_mv=-85.23
+purkinje_dt_ms=0.001
+pvj_g_mS=0.05
+pvj_max_dist_mm=2.0
+pvj_current_scale=1.0
+purkinje_stim_start_ms=0.0
+purkinje_stim_end_ms=1.0
+purkinje_stim_amp=-2.0
+purkinje_stim_nodes=0
+
+# Myocardial stimulus (atria-side kickoff)
+stim_start_ms=0.0
+stim_end_ms=1.5
+stim_amp=-15.0
+stim_region=box,0.0,0.0,0.0,2.0,7.0,3.0
+
+# Time
+dt_pde_ms=0.005
+dt_ode_ms=0.001
+t_end_ms=20.0
+
+# Solver
+use_petsc=0
+use_hypre_boomeramg=1
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# IO
+output_stride=20
+checkpoint_stride=100
+output_dir=output/niederer_purkinje_avdelay
+checkpoint_dir=checkpoint/niederer_purkinje_avdelay

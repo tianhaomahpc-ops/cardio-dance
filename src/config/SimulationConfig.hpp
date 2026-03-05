@@ -64,6 +64,26 @@ struct SimulationConfig {
   std::vector<int> ventricles_volume_attrs;
   std::vector<int> fibrosis_volume_attrs;
   double fibrosis_sigma_scale = 0.1;
+  std::vector<int> av_delay_volume_attrs;
+  double av_delay_sigma_scale = 0.05;
+  bool use_passive_model = false;
+  double passive_g_mS_per_uF = 0.0;
+
+  // Optional 1D Purkinje network + PVJ coupling.
+  bool enable_purkinje = false;
+  std::string purkinje_network_path;
+  double purkinje_cm_uF_per_mm = 0.01;
+  double purkinje_edge_g_mS = 1.0;
+  double purkinje_leak_g_mS = 0.0;
+  double purkinje_rest_mv = -85.23;
+  double purkinje_dt_ms = 0.01;
+  double pvj_g_mS = 0.5;
+  double pvj_max_dist_mm = 1.5;
+  double pvj_current_scale = 1.0;
+  double purkinje_stim_start_ms = 0.0;
+  double purkinje_stim_end_ms = 0.0;
+  double purkinje_stim_amp = 0.0;
+  std::vector<int> purkinje_stim_nodes;
 
   double dt_pde_ms = 0.02;
   double dt_ode_ms = 0.01;
@@ -89,6 +109,11 @@ struct SimulationConfig {
   bool wholebody_solve_every_step = false;
   int ksp_max_it = 500;
   double ksp_rtol = 1e-8;
+  // Switch PETSc backend to femheart-style PCG path:
+  // - PetscPCGSolver (no "mono_" prefix)
+  // - default zero initial guess (iter_mode=false)
+  // - no explicit ASM/GASM subdomain override
+  bool petsc_use_femheart_solver = false;
   bool petsc_use_geometric_asm = true;
   int petsc_asm_nx = 1;
   int petsc_asm_ny = 1;
