@@ -1,11 +1,13 @@
 #pragma once
 
 #include "config/SimulationConfig.hpp"
-#include "ode/TT06Model.hpp"
+#include "ode/IIonicModel.hpp"
 #include "solver/LinearSolverFactory.hpp"
 #include "space/Assembler.hpp"
 
 namespace mono {
+
+class PvjCoupler;
 
 // Per-step wall-time breakdown for solver and reaction workflow.
 struct StepTimingBreakdown {
@@ -14,20 +16,25 @@ struct StepTimingBreakdown {
   double linear_solve_ms = 0.0;
   double sync_vm_ms = 0.0;
   double ode_advance_ms = 0.0;
+  double pvj_ms = 0.0;
   double step_total_ms = 0.0;
 };
 
 // Operator-splitting stepper for monodomain:
 // 1) compute I_ion
-// 2) build RHS (reaction + stimulus)
+// 2) build RHS (reaction + stimulus + optional PVJ coupling current)
 // 3) solve linear PDE step
 // 4) advance ODE states.
 class MonodomainStepper {
  public:
   MonodomainStepper(const SimulationConfig& cfg,
                     Assembler& assembler,
-                    TT06Model& tt06,
+                    IIonicModel& ionic,
                     LinearSystemSolver& linear_solver);
+
+  // Wire an optional PVJ coupler whose contribution is added to the heart RHS
+  // each step. Pass nullptr to disable.
+  void SetPvjCoupler(PvjCoupler* coupler) { pvj_coupler_ = coupler; }
 
   void InitializeVm(double v_init_mv);
   void InitializeFromCurrentVm(int step, double t_ms);
@@ -45,8 +52,9 @@ class MonodomainStepper {
  private:
   const SimulationConfig& cfg_;
   Assembler& assembler_;
-  TT06Model& tt06_;
+  IIonicModel& ionic_;
   LinearSystemSolver& linear_solver_;
+  PvjCoupler* pvj_coupler_ = nullptr;
 
   double t_ms_ = 0.0;
   int step_ = 0;
@@ -58,6 +66,7 @@ class MonodomainStepper {
   mfem::Vector tmp_;
   mfem::Vector stim_mask_true_;
   mfem::Vector stim_true_;
+  mfem::Vector pvj_current_true_;
   StepTimingBreakdown last_timing_;
 
   void BuildStimulusMask();

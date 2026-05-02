@@ -67,6 +67,9 @@ class Assembler {
   std::unique_ptr<mfem::VectorConstantCoefficient> const_s_coeff_;
   std::unique_ptr<mfem::VectorConstantCoefficient> const_n_coeff_;
   std::unique_ptr<FiberTensorCoefficient> d_coeff_;
+  // Optional per-element conductivity scaling (e.g., AV-delay, fibrosis).
+  std::unique_ptr<mfem::PWConstCoefficient> region_sigma_scale_;
+  std::unique_ptr<mfem::ScalarMatrixProductCoefficient> d_coeff_scaled_;
 
   std::unique_ptr<mfem::HypreParMatrix> M_;
   std::unique_ptr<mfem::HypreParMatrix> K_;

@@ -179,7 +179,9 @@ InterfaceMapper::InterfaceMapper(const SimulationConfig& cfg,
       heart_bdr_marker[attr - 1] = 1;
     }
   }
-  heart_.PFES().GetEssentialTrueDofs(heart_bdr_marker, heart_bdr_tdofs_local_);
+  // GetEssentialTrueDofs is non-const in MFEM <= 4.5; cast to support older headers.
+  const_cast<mfem::ParFiniteElementSpace&>(heart_.PFES())
+      .GetEssentialTrueDofs(heart_bdr_marker, heart_bdr_tdofs_local_);
 
   mfem::Vector xh, yh, zh;
   BuildTrueDofCoordinates(heart_.PFES(), xh, yh, zh);

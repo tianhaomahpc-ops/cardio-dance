@@ -190,6 +190,34 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "checkpoint_stride") cfg.checkpoint_stride = std::stoi(val);
     else if (key == "output_dir") cfg.output_dir = val;
     else if (key == "checkpoint_dir") cfg.checkpoint_dir = val;
+    // Purkinje + PVJ
+    else if (key == "enable_purkinje") cfg.enable_purkinje = ParseBool(val);
+    else if (key == "purkinje_network_path") cfg.purkinje_network_path = val;
+    else if (key == "purkinje_cable_subdivision") cfg.purkinje_cable_subdivision = std::stoi(val);
+    else if (key == "purkinje_dt_ms") cfg.purkinje_dt_ms = std::stod(val);
+    else if (key == "purkinje_cm_uF_per_mm2") cfg.purkinje_cm_uF_per_mm2 = std::stod(val);
+    else if (key == "purkinje_edge_g_mS_per_mm") cfg.purkinje_edge_g_mS_per_mm = std::stod(val);
+    else if (key == "purkinje_leak_g_mS_per_uF") cfg.purkinje_leak_g_mS_per_uF = std::stod(val);
+    else if (key == "purkinje_v_rest_mv") cfg.purkinje_v_rest_mv = std::stod(val);
+    else if (key == "purkinje_stim_nodes") cfg.purkinje_stim_nodes = ParseIntList(val);
+    else if (key == "purkinje_stim_start_ms") cfg.purkinje_stim_start_ms = std::stod(val);
+    else if (key == "purkinje_stim_end_ms") cfg.purkinje_stim_end_ms = std::stod(val);
+    else if (key == "purkinje_stim_amp_uA_per_uF") cfg.purkinje_stim_amp_uA_per_uF = std::stod(val);
+    else if (key == "pvj_g_mS") cfg.pvj_g_mS = std::stod(val);
+    else if (key == "pvj_max_dist_mm") cfg.pvj_max_dist_mm = std::stod(val);
+    else if (key == "pvj_current_scale") cfg.pvj_current_scale = std::stod(val);
+    else if (key == "pvj_delay_ms") cfg.pvj_delay_ms = std::stod(val);
+    // Regional ionic
+    else if (key == "enable_regional_ionic") cfg.enable_regional_ionic = ParseBool(val);
+    else if (key == "atria_volume_attrs") cfg.atria_volume_attrs = ParseIntList(val);
+    else if (key == "ventricle_volume_attrs") cfg.ventricle_volume_attrs = ParseIntList(val);
+    else if (key == "av_delay_volume_attrs") cfg.av_delay_volume_attrs = ParseIntList(val);
+    else if (key == "fibrosis_volume_attrs") cfg.fibrosis_volume_attrs = ParseIntList(val);
+    else if (key == "av_delay_sigma_scale") cfg.av_delay_sigma_scale = std::stod(val);
+    else if (key == "fibrosis_sigma_scale") cfg.fibrosis_sigma_scale = std::stod(val);
+    else if (key == "av_delay_leak_g_mS_per_uF") cfg.av_delay_leak_g_mS_per_uF = std::stod(val);
+    else if (key == "fibrosis_leak_g_mS_per_uF") cfg.fibrosis_leak_g_mS_per_uF = std::stod(val);
+    else if (key == "passive_v_rest_mv") cfg.passive_v_rest_mv = std::stod(val);
     else {
       throw std::runtime_error("Unknown config key: " + key);
     }
@@ -242,6 +270,23 @@ SimulationConfig LoadConfigFile(const std::string& path) {
   }
   if (cfg.petsc_asm_nx <= 0 || cfg.petsc_asm_ny <= 0 || cfg.petsc_asm_nz <= 0) {
     throw std::runtime_error("petsc_asm_nx/petsc_asm_ny/petsc_asm_nz must be > 0");
+  }
+  if (cfg.enable_purkinje) {
+    if (cfg.purkinje_network_path.empty()) {
+      throw std::runtime_error("enable_purkinje=1 requires purkinje_network_path");
+    }
+    if (cfg.purkinje_dt_ms <= 0.0 || cfg.purkinje_dt_ms > cfg.dt_pde_ms) {
+      throw std::runtime_error("purkinje_dt_ms must satisfy 0 < dt <= dt_pde_ms");
+    }
+    if (cfg.purkinje_cable_subdivision < 1) {
+      throw std::runtime_error("purkinje_cable_subdivision must be >= 1");
+    }
+    if (cfg.pvj_g_mS < 0.0 || cfg.pvj_max_dist_mm <= 0.0) {
+      throw std::runtime_error("pvj_g_mS must be >= 0 and pvj_max_dist_mm must be > 0");
+    }
+    if (cfg.pvj_delay_ms < 0.0) {
+      throw std::runtime_error("pvj_delay_ms must be >= 0");
+    }
   }
   return cfg;
 }

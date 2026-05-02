@@ -1,0 +1,77 @@
+# Purkinje + PVJ + AV-delay + regional ionic example, layered on top of the
+# Niederer benchmark mesh. To use this, first run tools/segment_av_delay (when
+# available) to produce a 4-attribute mesh; for now this config assumes the
+# stock benchmark mesh (single attribute = 1) so AV-delay scaling is a no-op.
+
+mesh_path=benchmarks/niederer/niederer_benchmark.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# Material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.02
+dt_ode_ms=0.02
+t_end_ms=80.0
+
+# Stimulus (used only if Purkinje pacing is disabled).
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+stim_fraction=0.03
+
+# Regional ionic (no-op until mesh has multi-attributes).
+enable_regional_ionic=1
+ventricle_volume_attrs=1
+atria_volume_attrs=11
+av_delay_volume_attrs=14
+fibrosis_volume_attrs=13
+av_delay_sigma_scale=0.02
+fibrosis_sigma_scale=0.1
+av_delay_leak_g_mS_per_uF=0.05
+fibrosis_leak_g_mS_per_uF=0.05
+passive_v_rest_mv=-85.0
+
+# Purkinje + PVJ
+enable_purkinje=1
+purkinje_network_path=config/purkinje_v.network
+purkinje_cable_subdivision=4
+purkinje_dt_ms=0.005
+purkinje_cm_uF_per_mm2=0.01
+purkinje_edge_g_mS_per_mm=1.5
+purkinje_v_rest_mv=-85.0
+
+purkinje_stim_nodes=0
+purkinje_stim_start_ms=0.0
+purkinje_stim_end_ms=2.0
+purkinje_stim_amp_uA_per_uF=-50.0
+
+pvj_g_mS=0.5
+pvj_max_dist_mm=2.0
+pvj_current_scale=1.0
+pvj_delay_ms=0.0
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# Output
+output_stride=200
+checkpoint_stride=2000
+output_dir=output/niederer_purkinje
+checkpoint_dir=checkpoint/niederer_purkinje

@@ -93,6 +93,49 @@ struct SimulationConfig {
   int checkpoint_stride = 100;
   std::string output_dir = "output";
   std::string checkpoint_dir = "checkpoint";
+
+  // ---- Purkinje + PVJ -----------------------------------------------------
+  bool enable_purkinje = false;
+  std::string purkinje_network_path;
+  // Each graph edge is subdivided into N FE segments (N = 1 reproduces the
+  // legacy nodal cable behavior; >= 2 captures intra-edge propagation delay).
+  int purkinje_cable_subdivision = 4;
+  // Cable surface-to-volume ratio is folded into edge axial conductance.
+  double purkinje_dt_ms = 0.005;
+  double purkinje_cm_uF_per_mm2 = 0.01;
+  // Per-edge axial conductance baseline (mS/mm). Edge weight in the .network
+  // file (if provided) overrides this on a per-edge basis.
+  double purkinje_edge_g_mS_per_mm = 1.5;
+  // Node leak conductance used by Stewart fallback or auxiliary diagnostics.
+  double purkinje_leak_g_mS_per_uF = 0.0;
+  double purkinje_v_rest_mv = -90.0;
+
+  // Direct stimulus on Purkinje graph (e.g., His-bundle injection at root).
+  std::vector<int> purkinje_stim_nodes;
+  double purkinje_stim_start_ms = 0.0;
+  double purkinje_stim_end_ms = 2.0;
+  double purkinje_stim_amp_uA_per_uF = 0.0;
+
+  // PVJ gap-junction coupling at terminals.
+  double pvj_g_mS = 0.5;
+  double pvj_max_dist_mm = 1.5;
+  double pvj_current_scale = 1.0;
+  // Optional anatomical delay buffer between Purkinje and ventricular sampling.
+  double pvj_delay_ms = 0.0;
+
+  // ---- Regional ionic model dispatch --------------------------------------
+  bool enable_regional_ionic = false;
+  std::vector<int> atria_volume_attrs;
+  std::vector<int> ventricle_volume_attrs;
+  std::vector<int> av_delay_volume_attrs;
+  std::vector<int> fibrosis_volume_attrs;
+  // Conductivity scaling (multiplicative) applied per attribute set.
+  double av_delay_sigma_scale = 0.02;
+  double fibrosis_sigma_scale = 0.1;
+  // Passive model parameters used in AV-delay / fibrosis regions.
+  double av_delay_leak_g_mS_per_uF = 0.05;
+  double fibrosis_leak_g_mS_per_uF = 0.05;
+  double passive_v_rest_mv = -85.0;
 };
 
 // Parse key=value config file with strict key validation.

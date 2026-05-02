@@ -5,6 +5,8 @@
 #include <cmath>
 #include <limits>
 
+#include "solver/PvjCoupler.hpp"
+
 namespace mono {
 namespace {
 
@@ -32,9 +34,9 @@ bool PointInStimulusRegion(const StimulusRegion& reg, const mfem::Vector& x, int
 
 MonodomainStepper::MonodomainStepper(const SimulationConfig& cfg,
                                      Assembler& assembler,
-                                     TT06Model& tt06,
+                                     IIonicModel& ionic,
                                      LinearSystemSolver& linear_solver)
-    : cfg_(cfg), assembler_(assembler), tt06_(tt06), linear_solver_(linear_solver) {
+    : cfg_(cfg), assembler_(assembler), ionic_(ionic), linear_solver_(linear_solver) {
   const int n = assembler_.TrueVSize();
   vm_n_.SetSize(n);
   vm_np1_.SetSize(n);
@@ -43,6 +45,8 @@ MonodomainStepper::MonodomainStepper(const SimulationConfig& cfg,
   tmp_.SetSize(n);
   stim_mask_true_.SetSize(n);
   stim_true_.SetSize(n);
+  pvj_current_true_.SetSize(n);
+  pvj_current_true_ = 0.0;
 
   assembler_.Vm().GetTrueDofs(vm_n_);
   linear_solver_.SetOperator(assembler_.A());
@@ -141,7 +145,7 @@ void MonodomainStepper::BuildStimulus(double t_mid_ms) {
 }
 
 void MonodomainStepper::BuildRhs(double t_mid_ms) {
-  // RHS = B*Vn - chi*Cm*M*(I_ion + I_stim)
+  // RHS = B*Vn - chi*Cm*M*(I_ion + I_stim + I_pvj)
   const double react_scale = cfg_.chi_per_mm * cfg_.cm_uF_per_mm2;
   assembler_.B().Mult(vm_n_, rhs_);
 
@@ -151,6 +155,14 @@ void MonodomainStepper::BuildRhs(double t_mid_ms) {
   BuildStimulus(t_mid_ms);
   assembler_.M().Mult(stim_true_, tmp_);
   rhs_.Add(-react_scale, tmp_);
+
+  // PVJ injects a depolarizing current into ventricular DOFs near terminal
+  // Purkinje nodes. Sign convention: pvj_current_true_ already follows
+  // I_ion semantics (negative = inward depolarizing).
+  if (pvj_coupler_ != nullptr) {
+    assembler_.M().Mult(pvj_current_true_, tmp_);
+    rhs_.Add(-react_scale, tmp_);
+  }
 }
 
 void MonodomainStepper::SyncVmToGridFunction(const mfem::Vector& vm_true) {
@@ -163,15 +175,25 @@ void MonodomainStepper::Bootstrap() {
 
   // 1) Evaluate ionic source at V^n/state^n.
   auto t_begin = Clock::now();
-  tt06_.ComputeIion(vm_n_, iion_true_);
+  ionic_.ComputeIion(vm_n_, iion_true_);
   auto t_end = Clock::now();
   last_timing_.iion_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 2) Advance ionic states first (ODE -> PDE coupling order).
   t_begin = Clock::now();
-  tt06_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
+  ionic_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
   t_end = Clock::now();
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+
+  // 2.5) PVJ Purkinje -> myocardium coupling current at V^n.
+  last_timing_.pvj_ms = 0.0;
+  if (pvj_coupler_ != nullptr) {
+    t_begin = Clock::now();
+    pvj_coupler_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+    t_end = Clock::now();
+    last_timing_.pvj_ms +=
+        std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+  }
 
   // 3) Build RHS with current ionic source.
   t_begin = Clock::now();
@@ -195,6 +217,16 @@ void MonodomainStepper::Bootstrap() {
   vm_n_ = vm_np1_;
   t_ms_ = cfg_.dt_pde_ms;
   step_ = 1;
+
+  // 6) Advance Purkinje cable using updated V^{n+1} for the bidirectional sample.
+  if (pvj_coupler_ != nullptr) {
+    auto t_begin_pvj = Clock::now();
+    pvj_coupler_->AdvancePurkinje(cfg_.dt_pde_ms, vm_n_, 0.5 * cfg_.dt_pde_ms);
+    auto t_end_pvj = Clock::now();
+    last_timing_.pvj_ms +=
+        std::chrono::duration<double, std::milli>(t_end_pvj - t_begin_pvj).count();
+  }
+
   last_timing_.step_total_ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
 }
 
@@ -204,17 +236,27 @@ void MonodomainStepper::StepNoCorrection() {
 
   // 1) I_ion(V^n, state^n)
   auto t_begin = Clock::now();
-  tt06_.ComputeIion(vm_n_, iion_true_);
+  ionic_.ComputeIion(vm_n_, iion_true_);
   auto t_end = Clock::now();
   last_timing_.iion_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   // 2) Advance ionic states first (ODE -> PDE coupling order).
   t_begin = Clock::now();
-  tt06_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
+  ionic_.AdvanceStates(cfg_.dt_pde_ms, cfg_.dt_ode_ms, vm_n_);
   t_end = Clock::now();
   last_timing_.ode_advance_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   const double t_mid = t_ms_ + 0.5 * cfg_.dt_pde_ms;
+
+  // 2.5) PVJ Purkinje -> myocardium coupling current evaluated at V^n.
+  last_timing_.pvj_ms = 0.0;
+  if (pvj_coupler_ != nullptr) {
+    t_begin = Clock::now();
+    pvj_coupler_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+    t_end = Clock::now();
+    last_timing_.pvj_ms +=
+        std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+  }
 
   // 3) Build split RHS.
   t_begin = Clock::now();
@@ -238,6 +280,17 @@ void MonodomainStepper::StepNoCorrection() {
   vm_n_ = vm_np1_;
   t_ms_ += cfg_.dt_pde_ms;
   ++step_;
+
+  // 6) Advance Purkinje cable using updated V^{n+1} for bidirectional sampling.
+  if (pvj_coupler_ != nullptr) {
+    auto t_begin_pvj = Clock::now();
+    pvj_coupler_->AdvancePurkinje(cfg_.dt_pde_ms, vm_n_,
+                                  t_ms_ - 0.5 * cfg_.dt_pde_ms);
+    auto t_end_pvj = Clock::now();
+    last_timing_.pvj_ms +=
+        std::chrono::duration<double, std::milli>(t_end_pvj - t_begin_pvj).count();
+  }
+
   last_timing_.step_total_ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
 }
 

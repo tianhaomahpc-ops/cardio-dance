@@ -14,10 +14,16 @@ include(Dependencies)
 add_library(monodomain_core
   src/config/SimulationConfig.cpp
   src/ode/TT06Model.cpp
+  src/ode/PassiveModel.cpp
+  src/ode/StewartPurkinjeModel.cpp
+  src/ode/Grandi2011Model.cpp
+  src/ode/RegionalIonicModel.cpp
   src/space/FiberTensorCoefficient.cpp
   src/space/Assembler.cpp
   src/solver/LinearSolverFactory.cpp
   src/solver/MonodomainStepper.cpp
+  src/solver/PurkinjeCableSolver.cpp
+  src/solver/PvjCoupler.cpp
   src/solver/ExtracellularRecoverySolver.cpp
   src/solver/TorsoPotentialSolver.cpp
   src/coupling/InterfaceMapper.cpp
@@ -75,3 +81,11 @@ add_test(NAME restart_resume COMMAND test_restart_resume)
 add_executable(test_wholebody_smoke tests/test_wholebody_smoke.cpp)
 target_link_libraries(test_wholebody_smoke PRIVATE monodomain_core)
 add_test(NAME wholebody_smoke COMMAND test_wholebody_smoke)
+
+add_executable(test_stewart_single_cell tests/test_stewart_single_cell.cpp)
+target_link_libraries(test_stewart_single_cell PRIVATE monodomain_core)
+add_test(NAME stewart_single_cell COMMAND test_stewart_single_cell)
+
+add_executable(test_purkinje_cable_smoke tests/test_purkinje_cable_smoke.cpp)
+target_link_libraries(test_purkinje_cable_smoke PRIVATE monodomain_core)
+add_test(NAME purkinje_cable_smoke COMMAND test_purkinje_cable_smoke)

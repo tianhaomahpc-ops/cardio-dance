@@ -32,7 +32,7 @@ std::string CheckpointIO::Tt06ShardPath(int rank) const {
 void CheckpointIO::SaveLatest(int step,
                               double t_ms,
                               const mfem::ParGridFunction& vm,
-                              const TT06Model& tt06) const {
+                              const IIonicModel& ionic) const {
   // Each rank writes local shard independently.
   {
     std::ofstream vm_out(VmShardPath(rank_));
@@ -41,7 +41,7 @@ void CheckpointIO::SaveLatest(int step,
 
   {
     std::ofstream cell_out(Tt06ShardPath(rank_), std::ios::binary);
-    tt06.SaveState(cell_out);
+    ionic.SaveState(cell_out);
   }
 
   MPI_Barrier(comm_);
@@ -58,7 +58,8 @@ void CheckpointIO::SaveLatest(int step,
   MPI_Barrier(comm_);
 }
 
-bool CheckpointIO::LoadLatest(int& step, double& t_ms, mfem::ParGridFunction& vm, TT06Model& tt06) const {
+bool CheckpointIO::LoadLatest(int& step, double& t_ms, mfem::ParGridFunction& vm,
+                              IIonicModel& ionic) const {
   constexpr int kMetaUnknown = -1;
   constexpr int kMetaLegacy = 0;
   constexpr int kMetaV2 = 2;
@@ -144,7 +145,7 @@ bool CheckpointIO::LoadLatest(int& step, double& t_ms, mfem::ParGridFunction& vm
     if (!cell_in) {
       return false;
     }
-    tt06.LoadState(cell_in);
+    ionic.LoadState(cell_in);
   }
 
   step = checkpoint_step;

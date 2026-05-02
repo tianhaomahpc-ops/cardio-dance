@@ -18,10 +18,14 @@
 #include "coupling/InterfaceMapper.hpp"
 #include "io/CheckpointIO.hpp"
 #include "io/OutputManager.hpp"
+#include "ode/RegionalIonicModel.hpp"
+#include "ode/StewartPurkinjeModel.hpp"
 #include "ode/TT06Model.hpp"
 #include "solver/ExtracellularRecoverySolver.hpp"
 #include "solver/LinearSolverFactory.hpp"
 #include "solver/MonodomainStepper.hpp"
+#include "solver/PurkinjeCableSolver.hpp"
+#include "solver/PvjCoupler.hpp"
 #include "solver/TorsoPotentialSolver.hpp"
 #include "space/Assembler.hpp"
 
@@ -112,11 +116,69 @@ int main(int argc, char* argv[]) {
       }
       auto& assembler = *assembler_ptr;
 
-      mono::TT06Model tt06(assembler.TrueVSize());
-      tt06.InitializeRestState(-85.23);
+      // Heart-side ionic model: regional dispatch when enabled, else TT06.
+      std::unique_ptr<mono::TT06Model> tt06_uniform;
+      std::unique_ptr<mono::RegionalIonicModel> regional_ionic;
+      mono::IIonicModel* heart_ionic_ptr = nullptr;
+      if (cfg.enable_regional_ionic) {
+        regional_ionic = std::make_unique<mono::RegionalIonicModel>(cfg, assembler.PFES());
+        regional_ionic->InitializeRestState(-85.23);
+        heart_ionic_ptr = regional_ionic.get();
+        if (rank == 0) {
+          std::cout << "[regional] DOFs by region: ventricle="
+                    << regional_ionic->LocalDofCount(mono::RegionalIonicModel::Region::Ventricle)
+                    << ", atria="
+                    << regional_ionic->LocalDofCount(mono::RegionalIonicModel::Region::Atria)
+                    << ", av_delay="
+                    << regional_ionic->LocalDofCount(mono::RegionalIonicModel::Region::AvDelay)
+                    << ", fibrosis="
+                    << regional_ionic->LocalDofCount(mono::RegionalIonicModel::Region::Fibrosis)
+                    << " (rank 0)" << std::endl;
+        }
+      } else {
+        tt06_uniform = std::make_unique<mono::TT06Model>(assembler.TrueVSize());
+        tt06_uniform->InitializeRestState(-85.23);
+        heart_ionic_ptr = tt06_uniform.get();
+      }
+      mono::IIonicModel& ionic = *heart_ionic_ptr;
 
       mono::LinearSystemSolver linear_solver(cfg, MPI_COMM_WORLD, &assembler.PFES());
-      mono::MonodomainStepper stepper(cfg, assembler, tt06, linear_solver);
+      mono::MonodomainStepper stepper(cfg, assembler, ionic, linear_solver);
+
+      // Optional Purkinje + PVJ coupling.
+      std::unique_ptr<mono::StewartPurkinjeModel> purkinje_ionic;
+      std::unique_ptr<mono::PurkinjeCableSolver> cable;
+      std::unique_ptr<mono::PvjCoupler> pvj;
+      if (cfg.enable_purkinje) {
+        // Pre-count FE nodes by peeking at the network file header so we can
+        // size the Stewart per-node state before constructing the cable.
+        std::ifstream peek(cfg.purkinje_network_path);
+        if (!peek) {
+          throw std::runtime_error("cannot open purkinje_network_path");
+        }
+        int n_graph_nodes = 0;
+        int n_graph_edges = 0;
+        peek >> n_graph_nodes >> n_graph_edges;
+        if (!peek || n_graph_nodes <= 0) {
+          throw std::runtime_error("Purkinje network: invalid header");
+        }
+        const int subdivision = std::max(1, cfg.purkinje_cable_subdivision);
+        const int n_fe = n_graph_nodes + n_graph_edges * (subdivision - 1);
+        purkinje_ionic = std::make_unique<mono::StewartPurkinjeModel>(n_fe);
+        cable = std::make_unique<mono::PurkinjeCableSolver>(cfg, *purkinje_ionic);
+        cable->LoadNetwork(cfg.purkinje_network_path);
+        cable->Initialize(cfg.purkinje_v_rest_mv);
+        pvj = std::make_unique<mono::PvjCoupler>(cfg, assembler.PFES(), *cable);
+        stepper.SetPvjCoupler(pvj.get());
+        if (rank == 0) {
+          std::cout << "[purkinje] cable: " << n_graph_nodes
+                    << " graph nodes, " << n_graph_edges << " edges, "
+                    << n_fe << " FE nodes; "
+                    << pvj->GlobalNumMappedPvj() << "/" << cable->NumTerminals()
+                    << " terminals mapped, max_dist="
+                    << pvj->GlobalMaxMappedDistMm() << " mm" << std::endl;
+        }
+      }
 
       std::unique_ptr<mono::ExtracellularRecoverySolver> ue_solver;
       std::unique_ptr<mono::TorsoPotentialSolver> torso_solver;
@@ -382,7 +444,7 @@ int main(int argc, char* argv[]) {
       if (restart_from_checkpoint) {
         int restart_step = 0;
         double restart_t_ms = 0.0;
-        if (!checkpoint.LoadLatest(restart_step, restart_t_ms, assembler.Vm(), tt06)) {
+        if (!checkpoint.LoadLatest(restart_step, restart_t_ms, assembler.Vm(), ionic)) {
           throw std::runtime_error("restart requested but checkpoint is missing or incompatible with current MPI size");
         }
         stepper.InitializeFromCurrentVm(restart_step, restart_t_ms);
@@ -451,7 +513,7 @@ int main(int argc, char* argv[]) {
 
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();
-          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), tt06);
+          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), ionic);
           checkpoint_ms_local =
               std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
@@ -502,7 +564,7 @@ int main(int argc, char* argv[]) {
         }
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();
-          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), tt06);
+          checkpoint.SaveLatest(stepper.StepCount(), stepper.TimeMs(), assembler.Vm(), ionic);
           checkpoint_ms_local =
               std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
