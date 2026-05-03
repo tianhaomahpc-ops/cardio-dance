@@ -337,7 +337,49 @@ End-to-end:
 
 ---
 
-## 11. Change-log discipline
+## 11. Checkpoint format
+
+### 11.1 Meta file (CHKPT_V3)
+
+Plain-text, written only by rank 0:
+
+```
+CHKPT_V3
+<world_size>
+<step>
+<t_ms>
+<model_id>
+```
+
+`model_id` is `IIonicModel::ModelId()` of the model that wrote the
+checkpoint. `LoadLatest` refuses to proceed if the runtime model's
+`ModelId()` does not match (or, for legacy V2/V0 metas without `model_id`,
+if the runtime model is not TT06).
+
+### 11.2 Shards
+
+- `vm_rank<NNNNNN>.gf` — `mfem::ParGridFunction::Save` per rank.
+- `cell_rank<NNNNNN>.bin` — `IIonicModel::SaveState` per rank. Binary
+  layout is model-specific; cross-model loads are caught by the model_id
+  check before any binary is read.
+
+### 11.3 Format compatibility
+
+| Meta header | Status                           |
+|-------------|----------------------------------|
+| CHKPT_V3    | current, supported               |
+| CHKPT_V2    | TT06-only legacy; refused otherwise |
+| (legacy)    | single-rank TT06 only             |
+
+### 11.4 Verified by
+
+`tests/test_checkpoint_model_id.cpp`: writes a TT06 checkpoint, then asserts
+`PassiveModel` LoadLatest returns false and a fresh `TT06Model` LoadLatest
+returns true with matching step/t_ms.
+
+---
+
+## 12. Change-log discipline
 
 Every commit touching algorithms in this stack must include a one-line
 note in the message body:

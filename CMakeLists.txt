@@ -107,3 +107,7 @@ add_test(NAME pvj_active_sign COMMAND test_pvj_active_sign)
 add_executable(test_regional_isolation tests/test_regional_isolation.cpp)
 target_link_libraries(test_regional_isolation PRIVATE monodomain_core)
 add_test(NAME regional_isolation COMMAND test_regional_isolation)
+
+add_executable(test_checkpoint_model_id tests/test_checkpoint_model_id.cpp)
+target_link_libraries(test_checkpoint_model_id PRIVATE monodomain_core)
+add_test(NAME checkpoint_model_id COMMAND test_checkpoint_model_id)

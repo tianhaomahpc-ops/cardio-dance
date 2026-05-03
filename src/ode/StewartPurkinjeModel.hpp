@@ -37,6 +37,7 @@ class StewartPurkinjeModel : public IIonicModel {
   void LoadState(std::istream& is) override;
 
   int NumNodes() const override { return n_nodes_; }
+  std::string ModelId() const override { return "Stewart2009"; }
 
  private:
   // 20 states match the Stewart 2009 CellML ordering used here:

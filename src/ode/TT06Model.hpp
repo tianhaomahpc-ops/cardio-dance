@@ -25,6 +25,7 @@ class TT06Model : public IIonicModel {
   void LoadState(std::istream& is) override;
 
   int NumNodes() const override { return n_nodes_; }
+  std::string ModelId() const override { return "TT06"; }
 
  private:
   static constexpr int kNumStates = 19;

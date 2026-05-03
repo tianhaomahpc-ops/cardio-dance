@@ -46,6 +46,7 @@ class RegionalIonicModel : public IIonicModel {
   void LoadState(std::istream& is) override;
 
   int NumNodes() const override { return n_nodes_; }
+  std::string ModelId() const override { return "Regional"; }
 
   // Diagnostics: number of true DOFs per region (this rank).
   int LocalDofCount(Region r) const { return per_region_count_[static_cast<int>(r)]; }

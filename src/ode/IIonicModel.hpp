@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <string>
 
 #include "mfem.hpp"
 
@@ -28,6 +29,10 @@ class IIonicModel {
   virtual void LoadState(std::istream& is) = 0;
 
   virtual int NumNodes() const = 0;
+
+  // Stable string identifier used by CheckpointIO to refuse cross-model
+  // restarts. Must be unique per concrete model type.
+  virtual std::string ModelId() const = 0;
 };
 
 }  // namespace mono
