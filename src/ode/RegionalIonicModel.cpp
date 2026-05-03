@@ -31,15 +31,20 @@ RegionalIonicModel::RegionalIonicModel(const SimulationConfig& cfg,
 
   BuildDofRegionMap(pfes, cfg);
 
-  // All four child models size to full DOF count; per-region calls only
-  // touch DOFs whose dof_region_ matches. State stored only where used; the
-  // unused per-DOF entries remain at rest and never feed back into the system.
-  ventricle_model_ = std::make_unique<TT06Model>(n_nodes_);
-  atria_model_     = std::make_unique<Grandi2011Model>(n_nodes_);
-  avdelay_model_   = std::make_unique<PassiveModel>(
-      n_nodes_, cfg.av_delay_leak_g_mS_per_uF, cfg.passive_v_rest_mv);
-  fibrosis_model_  = std::make_unique<PassiveModel>(
-      n_nodes_, cfg.fibrosis_leak_g_mS_per_uF, cfg.passive_v_rest_mv);
+  // Each child sized to its region's DOF count. Empty regions still receive a
+  // size-1 placeholder so the unique_ptr is valid; region_indices_[r] empty
+  // means we never call into the child anyway.
+  auto safe_size = [](int n) { return std::max(n, 1); };
+  ventricle_model_ = std::make_unique<TT06Model>(
+      safe_size(per_region_count_[static_cast<int>(Region::Ventricle)]));
+  atria_model_ = std::make_unique<Grandi2011Model>(
+      safe_size(per_region_count_[static_cast<int>(Region::Atria)]));
+  avdelay_model_ = std::make_unique<PassiveModel>(
+      safe_size(per_region_count_[static_cast<int>(Region::AvDelay)]),
+      cfg.av_delay_leak_g_mS_per_uF, cfg.passive_v_rest_mv);
+  fibrosis_model_ = std::make_unique<PassiveModel>(
+      safe_size(per_region_count_[static_cast<int>(Region::Fibrosis)]),
+      cfg.fibrosis_leak_g_mS_per_uF, cfg.passive_v_rest_mv);
 }
 
 RegionalIonicModel::~RegionalIonicModel() = default;
@@ -59,12 +64,12 @@ void RegionalIonicModel::BuildDofRegionMap(const mfem::ParFiniteElementSpace& pf
     if (fibrosis.count(attr))  return Region::Fibrosis;
     if (atria.count(attr))     return Region::Atria;
     if (ventricle.count(attr)) return Region::Ventricle;
-    return Region::Ventricle;  // default fallback
+    return Region::Ventricle;
   };
 
   // Walk elements and tag DOFs by their owning element's attribute.
-  // Multiple attributes touching one DOF: most-specific wins (AV-delay >
-  // fibrosis > atria > ventricle).
+  // Region priority enforces AV-delay > Fibrosis > Atria > Ventricle on
+  // shared DOFs.
   std::vector<int> dof_priority(static_cast<size_t>(n_nodes_), -1);
 
   const int num_elements = pfes.GetParMesh()->GetNE();
@@ -72,12 +77,12 @@ void RegionalIonicModel::BuildDofRegionMap(const mfem::ParFiniteElementSpace& pf
   for (int e = 0; e < num_elements; ++e) {
     const int attr = pfes.GetParMesh()->GetAttribute(e);
     const Region r = attr_to_region(attr);
-    const int prio = static_cast<int>(r);  // higher index = higher priority
+    const int prio = static_cast<int>(r);
     pfes.GetElementDofs(e, dofs);
     for (int i = 0; i < dofs.Size(); ++i) {
       const int local = dofs[i] >= 0 ? dofs[i] : -1 - dofs[i];
       const int tdof = pfes.GetLocalTDofNumber(local);
-      if (tdof < 0) continue;  // not owned by this rank
+      if (tdof < 0) continue;
       if (prio > dof_priority[tdof]) {
         dof_priority[tdof] = prio;
         dof_region_[tdof] = static_cast<int>(r);
@@ -85,7 +90,6 @@ void RegionalIonicModel::BuildDofRegionMap(const mfem::ParFiniteElementSpace& pf
     }
   }
 
-  // Bucket DOFs per region for fast gather/scatter.
   for (int i = 0; i < kNumRegions; ++i) {
     region_indices_[i].clear();
   }
@@ -107,22 +111,25 @@ void RegionalIonicModel::InitializeRestState(double v_rest_mv) {
 void RegionalIonicModel::GatherForRegion(Region r, const mfem::Vector& src,
                                          mfem::Vector& dst) const {
   const auto& idx = region_indices_[static_cast<int>(r)];
-  if (dst.Size() != n_nodes_) {
-    dst.SetSize(n_nodes_);
+  const int n_local = static_cast<int>(idx.size());
+  // Region-local sized buffer; Stewart/Grandi/etc. expect size == NumNodes().
+  if (dst.Size() != std::max(n_local, 1)) {
+    dst.SetSize(std::max(n_local, 1));
   }
-  // Pad with rest-state-equivalent values (V_m doesn't matter for non-region
-  // DOFs since their I_ion outputs are discarded). Use zeros for simplicity.
-  dst = 0.0;
-  for (int i : idx) {
-    dst[i] = src[i];
+  for (int i = 0; i < n_local; ++i) {
+    dst[i] = src[idx[i]];
   }
+  // If region empty we set the placeholder to a neutral value so children
+  // don't compute on undefined memory (their I_ion output is discarded).
+  if (n_local == 0) dst[0] = 0.0;
 }
 
 void RegionalIonicModel::ScatterFromRegion(Region r, const mfem::Vector& src,
                                            mfem::Vector& dst) const {
   const auto& idx = region_indices_[static_cast<int>(r)];
-  for (int i : idx) {
-    dst[i] = src[i];
+  const int n_local = static_cast<int>(idx.size());
+  for (int i = 0; i < n_local; ++i) {
+    dst[idx[i]] = src[i];
   }
 }
 
@@ -134,20 +141,16 @@ void RegionalIonicModel::ComputeIion(const mfem::Vector& vm_true,
   if (iion_true.Size() != n_nodes_) {
     iion_true.SetSize(n_nodes_);
   }
-
-  if (vm_local_.Size() != n_nodes_) {
-    vm_local_.SetSize(n_nodes_);
-    iion_local_.SetSize(n_nodes_);
-  }
-
-  // We pass full-length vectors to children but only consume their values at
-  // the DOFs belonging to that region.
   iion_true = 0.0;
 
-  auto run_region = [&](Region r, IIonicModel& m) {
-    if (per_region_count_[static_cast<int>(r)] == 0) return;
-    // Use vm_true directly; child writes a full-length vector.
-    m.ComputeIion(vm_true, iion_local_);
+  auto run_region = [&](Region r, const IIonicModel& m) {
+    const int n_local = per_region_count_[static_cast<int>(r)];
+    if (n_local == 0) return;
+    GatherForRegion(r, vm_true, vm_local_);
+    if (iion_local_.Size() != vm_local_.Size()) {
+      iion_local_.SetSize(vm_local_.Size());
+    }
+    m.ComputeIion(vm_local_, iion_local_);
     ScatterFromRegion(r, iion_local_, iion_true);
   };
 
@@ -159,13 +162,21 @@ void RegionalIonicModel::ComputeIion(const mfem::Vector& vm_true,
 
 void RegionalIonicModel::AdvanceStates(double dt_pde_ms, double dt_ode_ms,
                                        const mfem::Vector& vm_next_true) {
-  // Advance every child; only DOFs owned by their region matter, but the
-  // operations are O(N_dof) each, so total cost = O(4 * N_dof). For small
-  // regions this could be optimized later.
-  ventricle_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_next_true);
-  atria_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_next_true);
-  avdelay_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_next_true);
-  fibrosis_model_->AdvanceStates(dt_pde_ms, dt_ode_ms, vm_next_true);
+  if (vm_next_true.Size() != n_nodes_) {
+    throw std::runtime_error("RegionalIonicModel::AdvanceStates size mismatch");
+  }
+
+  auto run_region = [&](Region r, IIonicModel& m) {
+    const int n_local = per_region_count_[static_cast<int>(r)];
+    if (n_local == 0) return;
+    GatherForRegion(r, vm_next_true, vm_local_);
+    m.AdvanceStates(dt_pde_ms, dt_ode_ms, vm_local_);
+  };
+
+  run_region(Region::Ventricle, *ventricle_model_);
+  run_region(Region::Atria,     *atria_model_);
+  run_region(Region::AvDelay,   *avdelay_model_);
+  run_region(Region::Fibrosis,  *fibrosis_model_);
 }
 
 void RegionalIonicModel::SaveState(std::ostream& os) const {

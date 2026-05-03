@@ -103,3 +103,7 @@ set_tests_properties(purkinje_cable_cv PROPERTIES WILL_FAIL TRUE)
 add_executable(test_pvj_active_sign tests/test_pvj_active_sign.cpp)
 target_link_libraries(test_pvj_active_sign PRIVATE monodomain_core)
 add_test(NAME pvj_active_sign COMMAND test_pvj_active_sign)
+
+add_executable(test_regional_isolation tests/test_regional_isolation.cpp)
+target_link_libraries(test_regional_isolation PRIVATE monodomain_core)
+add_test(NAME regional_isolation COMMAND test_regional_isolation)

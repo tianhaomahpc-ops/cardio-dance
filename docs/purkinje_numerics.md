@@ -295,19 +295,24 @@ incident elements wins (priority order: AV-delay > Fibrosis > Atria > Ventricle)
 This guards against a DOF on a region boundary getting an inappropriate
 active model.
 
-### 9.2 Known limitation (2026-05)
+### 9.2 State isolation (resolved 2026-05)
 
-**Children currently allocate full-DOF state and `AdvanceStates` runs them
-on every DOF.** Only the I_ion contributions in the child's region are read
-back via scatter, but child state is silently being driven on DOFs outside
-its region. This is wasted work and a latent bug if a child's state
-trajectory depends on its own past V (e.g., concentration accumulation):
-state at "wrong" DOFs is not merely garbage, it can poison gather operations
-if used elsewhere.
+Each child model is constructed with size = `LocalDofCount(region)`, NOT the
+full DOF count. `RegionalIonicModel::ComputeIion` and `AdvanceStates` gather
+$V_m$ into a region-local buffer using `region_indices_[r]`, invoke the child
+on that buffer, and scatter the result back into the global I_ion vector. So
+a child's per-DOF state index is **region-local**, never indexed by global
+true DOF.
 
-**Fix in progress (Item 4 of remediation plan):** each child should own
-state sized to its region only, plus a region-DOF index map for
-gather/scatter on the I_ion API.
+Empty regions still allocate a 1-DOF placeholder so the unique_ptr is
+constructible, but that placeholder is never invoked because
+`per_region_count_[r] == 0` short-circuits the run path.
+
+Tested in `tests/test_regional_isolation.cpp`: a 1-D 4-element mesh with
+ventricle on elements 0-1 (TT06) and AV-delay on elements 2-3 (Passive)
+verifies that (a) DOFs partition the tdof set, (b) Passive at V_rest yields
+exactly 0 I_ion, (c) repeated AdvanceStates with extreme ventricular V does
+not corrupt AV-delay output.
 
 ---
 
