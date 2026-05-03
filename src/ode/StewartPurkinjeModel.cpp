@@ -187,17 +187,26 @@ double NodeCurrents(double V, const double* s, double* dstate) {
   const double xK1_inf = alpha_K1 / (alpha_K1 + beta_K1);
   const double I_K1 = c.g_K1 * std::sqrt(c.Ko / 5.4) * xK1_inf * (V - E_K);
 
-  // I_CaL (L-type calcium) -- Stewart uses Goldman-Hodgkin-Katz with CaSS.
+  // I_CaL (L-type calcium): TT06/Stewart Goldman-Hodgkin-Katz form.
+  //   I_CaL = g_CaL d f f2 fCass * 4 (V-15) F^2/RT *
+  //           (0.25 CaSS e^{2(V-15)F/RT} - Cao) / (e^{2(V-15)F/RT} - 1)
+  // Note: BOTH the (V-15) prefactor AND the exponent use the offset voltage;
+  // a previous version of this file used exp(2VF/RT) in the denominator while
+  // multiplying by (V-15), producing huge non-physiological CaL drive.
   const double VFRT = V * c.F / (c.R * c.T);
-  const double exp2VFRT = SafeExp(2.0 * VFRT);
-  double I_CaL = c.g_CaL * d * f * f2 * fCass * 4.0 * (V - 15.0) *
+  const double Vshift = V - 15.0;
+  const double VshiftFRT = Vshift * c.F / (c.R * c.T);
+  const double exp2_Vshift_FRT = SafeExp(2.0 * VshiftFRT);
+  double I_CaL = c.g_CaL * d * f * f2 * fCass * 4.0 * Vshift *
                  (c.F * c.F / (c.R * c.T));
-  const double denom = exp2VFRT - 1.0;
+  const double denom = exp2_Vshift_FRT - 1.0;
   if (std::fabs(denom) > 1e-9) {
-    I_CaL *= (0.25 * CaSS * exp2VFRT - c.Cao) / denom;
+    I_CaL *= (0.25 * CaSS * exp2_Vshift_FRT - c.Cao) / denom;
   } else {
+    // Limit V -> 15 mV: GHK reduces to driving force * concentrations.
     I_CaL *= 0.25 * CaSS - c.Cao;
   }
+  (void)VFRT;  // VFRT (without 15 mV offset) still used by I_NaCa/I_NaK below
 
   // I_NaCa (Na/Ca exchanger)
   const double e_g_VFRT = SafeExp(c.gamma * VFRT);

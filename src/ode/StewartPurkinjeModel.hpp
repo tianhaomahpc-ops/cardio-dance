@@ -10,6 +10,16 @@
 namespace mono {
 
 // Stewart-Aslanidi-Boyett-Zhang 2009 Purkinje cell model.
+//
+// !!! KNOWN BROKEN (2026-05) !!!
+// This is a hand-port from the Stewart 2009 paper, NOT a CellML-generated
+// source-of-truth. Single-cell tests show non-physiological AP peaks (~+120
+// mV vs paper ~+30 mV); see tests/test_stewart_single_cell.cpp. Suspected
+// cause: I_CaL GHK driving-force expression (V-15 instead of V) and missing
+// 0.341 inward Ca correction. DO NOT USE for scientific results.
+// TODO: replace with CellML-codegen output (see docs/purkinje_numerics.md
+// section "Importing CellML reference code").
+//
 // 20 state variables, Rush-Larsen for gating and Forward Euler for
 // concentrations -- mirrors the TT06Model integration scheme. Currents include
 // I_Na, I_CaL, I_to, I_Ks, I_Kr, I_K1, I_NaCa, I_NaK, I_pCa, I_pK, I_bNa,
