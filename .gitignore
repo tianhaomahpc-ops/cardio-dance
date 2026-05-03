@@ -13,3 +13,9 @@ benchmarks/
 *.swp
 *.DS_Store
 test_config_parse.options
+
+# Generated LaTeX intermediates
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc

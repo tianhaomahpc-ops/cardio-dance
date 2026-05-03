@@ -1,0 +1,671 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+%
+\documentclass[
+  11pt,
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{5}
+% Header for pandoc -> xelatex output. Liberation Serif provides bold/italic
+% variants (DejaVu Serif on this system ships only Book + Bold). Unicode
+% arrows / math symbols (↔, ⊗, ≤, ≥, …) that the body font lacks fall back
+% to DejaVu Sans, which carries the full BMP arrow block.
+\usepackage{fontspec}
+\setmainfont{Liberation Serif}
+\setsansfont{Liberation Sans}
+\setmonofont{Liberation Mono}[Scale=MatchLowercase]
+
+% Fallback for unicode glyphs missing in Liberation: route them through
+% DejaVu Sans so we never get a tofu box in the rendered PDF.
+\usepackage{newunicodechar}
+\newfontfamily{\arrowfont}{DejaVu Sans}
+\newunicodechar{↔}{{\arrowfont ↔}}
+\newunicodechar{→}{{\arrowfont →}}
+\newunicodechar{←}{{\arrowfont ←}}
+\newunicodechar{⊗}{{\arrowfont ⊗}}
+\newunicodechar{≤}{{\arrowfont ≤}}
+\newunicodechar{≥}{{\arrowfont ≥}}
+\newunicodechar{✓}{{\arrowfont ✓}}
+\newunicodechar{✗}{{\arrowfont ✗}}
+\newunicodechar{≈}{{\arrowfont ≈}}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{fancyvrb}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Purkinje + PVJ + Regional Ionic Numerics}
+\author{cardio-dance project}
+\date{2026-05}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{3}
+\tableofcontents
+}
+\hypertarget{purkinje-pvj-regional-ionic-numerics}{%
+\section{Purkinje + PVJ + Regional Ionic
+Numerics}\label{purkinje-pvj-regional-ionic-numerics}}
+
+This document is the source-of-truth for the mathematical formulation
+behind the Purkinje stack. Every algorithm change must update this
+document in the same commit so reviewers can audit math/code drift in
+one diff.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{domain-decomposition}{%
+\subsection{1. Domain decomposition}\label{domain-decomposition}}
+
+Three coupled discrete systems share state every PDE step:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1889}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.5333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2778}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+System
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Discretization
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Unknowns
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Myocardium & 3-D continuous Galerkin P1 on tetrahedra & \(V_m\) at true
+DOFs \\
+Purkinje cable & 1-D linear FE on a graph (subdivided edges) & \(V_p\)
+at FE nodes \\
+PVJ coupling & Discrete gap-junction current at terminal ↔ DOF &
+Per-link current \(I_{pvj}\) \\
+\end{longtable}
+
+Time stepping is operator-split Godunov with Crank-Nicolson on diffusion
+and Rush-Larsen + Forward Euler on reaction. Both PDEs march on the same
+outer \(\Delta t_\mathrm{PDE}\); the cable substeps with
+\(\Delta t_p \le \Delta t_\mathrm{PDE}\).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{sign-and-unit-conventions}{%
+\subsection{2. Sign and unit
+conventions}\label{sign-and-unit-conventions}}
+
+All currents in this codebase follow the TT06 / CellML convention:
+
+\begin{quote}
+\textbf{\(I_{ion} > 0\) is outward (repolarizing).}
+\textbf{\(I_{stim} < 0\) is depolarizing.}
+\end{quote}
+
+Units (consistently throughout):
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1728}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.2222}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.6049}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Quantity
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Unit
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Notes
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Length & mm & mesh coordinates, fiber lengths \\
+Time & ms & \\
+Voltage & mV & Cell membrane potential \\
+Concentration & mM (mmol/L) & \([Na^+]_i\), \([Ca^{2+}]_{SS}\), etc. \\
+\(C_m\) & μF/mm² & membrane capacitance per unit area \\
+\(\chi\) & 1/mm & surface-to-volume ratio \\
+\(\sigma\) & mS/mm & tissue conductivity \\
+\(g_\mathrm{ion}\) & mS/μF & normalized cell conductance \\
+\(I_{ion}, I_{stim}\) & μA/μF & normalized membrane current (∝ dV/dt) \\
+\end{longtable}
+
+\textbf{Verification:} the monodomain RHS in
+\texttt{MonodomainStepper::BuildRhs} reads
+\texttt{-chi*Cm*M*(I\_ion\ +\ I\_stim\ +\ I\_pvj)} --- the negative sign
+and \texttt{chi*Cm} prefactor convert from ``current per unit area''
+semantics to units consistent with the Crank-Nicolson system
+\(A V^{n+1} = B V^n + \mathrm{RHS}\).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{myocardial-monodomain-existing-recapped-here}{%
+\subsection{3. Myocardial monodomain (existing, recapped
+here)}\label{myocardial-monodomain-existing-recapped-here}}
+
+Continuous form on heart domain \(\Omega_h\):
+\[\chi C_m \partial_t V_m = \nabla\cdot(\boldsymbol\sigma \nabla V_m) - \chi C_m (I_{ion}(V_m, \mathbf{s}) + I_{stim} + I_{pvj}^h),\]
+\[\partial_t \mathbf{s} = \mathbf{f}(V_m, \mathbf{s}).\]
+
+Spatial discretization: P1 CG, mass \(M\) and stiffness \(K\) assembled
+with the fiber-aware tensor
+\(\boldsymbol\sigma = \sigma_f\, \mathbf{f}\!\otimes\!\mathbf{f} + \sigma_s\, \mathbf{s}\!\otimes\!\mathbf{s} + \sigma_n\, \mathbf{n}\!\otimes\!\mathbf{n}\).
+With \textbf{AV-delay / fibrosis regions} the stiffness uses an
+attribute-wise multiplier \(\alpha(x)\):
+\[K_{ij} = \int_{\Omega_h} \alpha(x)\, (\nabla\phi_i)^T \boldsymbol\sigma \nabla\phi_j\,\mathrm{d}x,\]
+where \$\alpha = \$ \texttt{av\_delay\_sigma\_scale} (0.02) on AV-delay
+attributes, \texttt{fibrosis\_sigma\_scale} (0.1) on fibrosis
+attributes, 1.0 elsewhere.
+
+\textbf{Code mapping:} \texttt{Assembler.cpp} builds
+\texttt{region\_sigma\_scale\_} as a \texttt{PWConstCoefficient} indexed
+by mesh attribute, then wraps the \texttt{FiberTensorCoefficient} in
+\texttt{ScalarMatrixProductCoefficient}. Single DiffusionIntegrator
+consumes the product.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{purkinje-cable}{%
+\subsection{4. Purkinje cable}\label{purkinje-cable}}
+
+\hypertarget{continuous-form}{%
+\subsubsection{4.1 Continuous form}\label{continuous-form}}
+
+Each Purkinje fiber is modeled as a 1-D cable. With per-edge axial
+conductivity \(g_a\) (mS/mm) and uniform \(C_m^p\) (μF/mm²),
+\[C_m^p \partial_t V_p = \partial_x (g_a \partial_x V_p) - I_{ion}^p(V_p, \mathbf{s}_p) - I_{pvj}^p - I_{stim}^p.\]
+At branch points (graph vertices with degree \textgreater{} 2) currents
+are conserved by construction: the FE assembly's nodal balance enforces
+Kirchhoff's law because each incident edge contributes its own
+\(g_a/L_\mathrm{seg}\) entry to the same row.
+
+\hypertarget{spatial-discretization}{%
+\subsubsection{4.2 Spatial
+discretization}\label{spatial-discretization}}
+
+Each graph edge of length \(L\) is subdivided into \(k\) FE sub-segments
+of length \(L/k\). Linear FE on each sub-segment yield the local
+stiffness
+\[K^e_{\mathrm{loc}} = \frac{g_a}{L/k} \begin{pmatrix} 1 & -1 \\ -1 & 1 \end{pmatrix}\]
+and a lumped mass \(M^e_{\mathrm{loc}} = \tfrac{C_m^p L/k}{2} I\).
+Global \(K_p\) and \(\mathrm{diag}(M_p)\) are sparse-assembled in
+\texttt{PurkinjeCableSolver::BuildSparseMatrices}.
+
+\textbf{Edge weight semantics:} the third token in \texttt{.network}
+edge lines is the \textbf{axial conductance per mm of edge length},
+i.e.~\(g_a\). If absent, the value defaults to
+\texttt{cfg.purkinje\_edge\_g\_mS\_per\_mm}. The per-segment conductance
+contribution is then \(g_\mathrm{seg} = g_a / L_\mathrm{seg}\).
+
+\hypertarget{time-stepping}{%
+\subsubsection{4.3 Time stepping}\label{time-stepping}}
+
+Operator split per outer \(\Delta t_\mathrm{PDE}\):
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Subdivide into
+  \(n_\mathrm{sub} = \lceil \Delta t_\mathrm{PDE} / \Delta t_p\rceil\)
+  steps of \(\Delta t = \Delta t_\mathrm{PDE}/n_\mathrm{sub}\).
+\item
+  Per substep:
+
+  \begin{enumerate}
+  \def\labelenumii{\arabic{enumii}.}
+  \tightlist
+  \item
+    Compute \(I_{ion}^p(V_p, \mathbf{s}_p)\) at current \(V_p\).
+  \item
+    Advance \(\mathbf{s}_p\) via Rush-Larsen (gates) + Forward Euler
+    (concentrations) using the current \(V_p\).
+  \item
+    Build external current \(I_\mathrm{ext} = I_{pvj}^p + I_{stim}^p\).
+  \item
+    Solve
+    \((M_p + \tfrac{\Delta t}{2} K_p) V_p^{n+1} = (M_p - \tfrac{\Delta t}{2} K_p) V_p^n - \Delta t\, M_p (I_{ion}^p + I_\mathrm{ext})\).
+  \end{enumerate}
+\end{enumerate}
+
+Linear solve: CG with Jacobi (\texttt{mfem::DSmoother}) preconditioner;
+the system matrices are cached and rebuilt only when \(\Delta t\)
+changes.
+
+\hypertarget{stability-dt-selection}{%
+\subsubsection{4.4 Stability / dt
+selection}\label{stability-dt-selection}}
+
+Crank-Nicolson is unconditionally A-stable for the diffusion split.
+Reaction substep is governed by the fastest gating \(\tau\) (I\_Na:
+\(\tau_m \approx 0.05\) ms near upstroke). Practical guidance: -
+\(\Delta t_p \le 0.01\) ms during upstroke (handled by Rush-Larsen exact
+gate update; FE on concentrations less sensitive) -
+\(\Delta t_\mathrm{PDE}/\Delta t_p \le 4\) keeps PVJ delay quantization
+\textless{} 0.005 ms
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{purkinje-ionic-model-stewart-2009}{%
+\subsection{5. Purkinje ionic model (Stewart
+2009)}\label{purkinje-ionic-model-stewart-2009}}
+
+\hypertarget{reference}{%
+\subsubsection{5.1 Reference}\label{reference}}
+
+Stewart, P., Aslanidi, O. V., Noble, D., Noble, P. J., Boyett, M. R., \&
+Zhang, H. (2009). \emph{Mathematical models of the electrical action
+potential of Purkinje fibre cells.} Phil. Trans. R. Soc. A 367 (1896),
+2225--2255. DOI 10.1098/rsta.2008.0283.
+
+The Stewart model is itself a Purkinje variant of TT06 with HCN funny
+current \(I_f\) added and modified \(I_{to}, I_{Ks}, I_{K1}\) kinetics.
+
+\hypertarget{currents-target-list}{%
+\subsubsection{5.2 Currents (target list)}\label{currents-target-list}}
+
+\(I_\mathrm{ion} = I_{Na} + I_{CaL} + I_{to} + I_{Kr} + I_{Ks} + I_{K1} + I_f^{Na} + I_f^K + I_{NaCa} + I_{NaK} + I_{pCa} + I_{pK} + I_{bNa} + I_{bCa} + I_\mathrm{sus}\)
+
+\textbf{I\_CaL (TT06/Stewart shifted GHK):}
+\[I_{CaL} = g_{CaL}\, d f f_2 f_{Cass}\, \frac{4(V-15)F^2}{RT}\, \frac{0.25\,[Ca]_{SS}\,e^{2(V-15)F/RT} - [Ca]_o}{e^{2(V-15)F/RT} - 1}.\]
+
+\textbf{Important:} both the prefactor and the exponential argument use
+the shifted voltage \(V_\mathrm{shift} = V - 15\) mV. A historical bug
+in this codebase mixed \(V-15\) in the prefactor with \(V\) in the
+exponent and produced huge non-physiological CaL drive.
+
+\hypertarget{state-vector-and-integration}{%
+\subsubsection{5.3 State vector and
+integration}\label{state-vector-and-integration}}
+
+20 states:
+\texttt{{[}0{]}V,\ {[}1{]}m,\ {[}2{]}h,\ {[}3{]}j,\ {[}4{]}xr1,\ {[}5{]}xr2,\ {[}6{]}xs,\ {[}7{]}r,\ {[}8{]}s,\ {[}9{]}d,\ {[}10{]}f,\ {[}11{]}f2,\ {[}12{]}fCass,\ {[}13{]}y(I\_f),\ {[}14{]}Cai,\ {[}15{]}CaSR,\ {[}16{]}CaSS,\ {[}17{]}Nai,\ {[}18{]}Ki,\ {[}19{]}Rprime}.
+
+Per substep: - States 1..13 (gates): Rush-Larsen
+\(x \leftarrow x_\infty - (x_\infty - x)\,e^{-\Delta t/\tau}\). - States
+14..19 (concentrations + RyR): Forward Euler
+\(x \leftarrow x + \Delta t\,\dot x\), with positivity clamps on
+\([Ca^{2+}]_*, [Na^+]_i, [K^+]_i\).
+
+\hypertarget{known-status-2026-05}{%
+\subsubsection{5.4 Known status (2026-05)}\label{known-status-2026-05}}
+
+The current \texttt{StewartPurkinjeModel} is a \textbf{hand-port from
+the paper}, not a CellML codegen output. After fixing the I\_CaL
+exponent bug it produces:
+
+\begin{longtable}[]{@{}lll@{}}
+\toprule\noalign{}
+Quantity & Paper Fig. 2 & Current code \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+V\_rest & -91 mV & -85.6 mV ✓ (loose) \\
+V\_peak & +30 mV & \textbf{+119 mV ✗} \\
+APD90 & 340 ms & 272 ms ✓ (loose) \\
+Repol & yes & yes ✓ \\
+\end{longtable}
+
+The peak overshoot is the main outstanding defect. Suspected residual
+issues: 1. Stim integration in the test (applied as external V
+perturbation rather than as -dt*I\_stim term in the dV balance) ---
+masks model behavior. 2. Possible sign or scaling bug in \(I_f^{Na}\) /
+\(I_f^K\) contribution during upstroke. 3. Concentration scale factor
+\texttt{Cm\_pF\ *\ 1e-6\ /\ (V\_c\ *\ F)} may be off by a factor of
+10--100, leading to fast Nai/Ki drift that distorts reversal potentials.
+
+The single-cell test asserts strict physiological ranges and is marked
+\texttt{WILL\_FAIL} in CMake until the model matches reference.
+
+\hypertarget{importing-cellml-reference-code}{%
+\subsubsection{5.5 Importing CellML reference
+code}\label{importing-cellml-reference-code}}
+
+Long-term remediation: 1. Download Stewart 2009 from
+\texttt{https://models.physiomeproject.org/exposure/...} (CellML 1.0
+XML). 2. Run OpenCOR or \texttt{cellml-tools} to emit C with
+\texttt{initConsts}, \texttt{computeRates}, \texttt{computeVariables}
+matching the TT06 generated code style. 3. Replace
+\texttt{src/ode/StewartPurkinjeModel.cpp} body with thin wrappers
+delegating to the generated functions, mirroring the
+\texttt{tt06\_generated.\{h,c\}} pattern. Keep the gate/concentration
+index lists (\texttt{kGateMaps}) as the only hand-written part. 4.
+Re-enable the strict physiological asserts in
+\texttt{test\_stewart\_single\_cell.cpp} and remove the
+\texttt{WILL\_FAIL} marker.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{atrial-ionic-model-grandi-2011}{%
+\subsection{6. Atrial ionic model (Grandi
+2011)}\label{atrial-ionic-model-grandi-2011}}
+
+\texttt{Grandi2011Model} is a \textbf{reduced 15-state compact port}
+retaining the dominant atrial currents:
+\(I_{Na}, I_{CaL}^\mathrm{simplified}, I_{Kr}, I_{Ks}, I_{to,f}, I_{Kur}, I_{K1}, I_{NaK}, I_{NaCa}, I_{pCa}, I_{bNa}, I_{bCa}\).
+The simplified \(I_{CaL}\) uses a constant driving force \((V - 60)\)
+rather than full GHK, matching what is typical for ``minimal-model''
+atrial sims when only conduction (not Ca dynamics) matters.
+
+\textbf{Status (2026-05):} no single-cell verification test exists yet
+for Grandi. Use this model only for atrial-region conduction studies,
+not for APD/AERP analysis.
+
+\textbf{Reference (target):} Grandi, E., Pandit, S. V., Voigt, N.,
+Workman, A. J., Dobrev, D., Jalife, J., \& Bers, D. M. (2011).
+\emph{Human atrial action potential and Ca²⁺ model: sinus rhythm and
+chronic atrial fibrillation.} Circulation Research 109 (9), 1055--1066.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{passive-leak-model}{%
+\subsection{7. Passive (leak) model}\label{passive-leak-model}}
+
+\[I_{ion}(V) = g_\mathrm{leak}\, (V - V_\mathrm{rest}).\]
+
+Used in AV-delay and fibrosis regions to suppress active depolarization
+while allowing electrotonic spread. State-free, so checkpoint is just
+the two parameters \((g_\mathrm{leak}, V_\mathrm{rest})\).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{pvj-coupling}{%
+\subsection{8. PVJ coupling}\label{pvj-coupling}}
+
+\hypertarget{continuous-form-1}{%
+\subsubsection{8.1 Continuous form}\label{continuous-form-1}}
+
+For each terminal Purkinje node \(t\) mapped to nearest myocardial true
+DOF \(d(t)\): \[I_{pvj,t} = g_{pvj}\, [V_p^t - V_m^{d(t)}]\, s_{pvj}.\]
+- \(g_{pvj}\) in mS/μF (config: \texttt{pvj\_g\_mS}, default 0.5) -
+\(s_{pvj}\) unitless scale (config: \texttt{pvj\_current\_scale},
+default 1.0)
+
+\hypertarget{sign-convention}{%
+\subsubsection{8.2 Sign convention}\label{sign-convention}}
+
+\begin{quote}
+When \(V_p > V_m\) (Purkinje more depolarized), \(I_{pvj} > 0\). The
+\textbf{myocardial RHS contribution} is \(+I_{pvj}\) at DOF \(d(t)\),
+treated with the same \texttt{+} sign as \(I_{ion}\) (outward
+semantics). So the actual contribution to the RHS is
+\(-\chi C_m M (\ldots + I_{pvj})\), i.e.~when \(V_p > V_m\) the negative
+sign \textbf{depolarizes} \(V_m\). ✓
+\end{quote}
+
+\begin{quote}
+The \textbf{Purkinje cable} sees \(-I_{pvj}\) at terminal \(t\)
+(Newton's third law: charge flows from Purkinje to myocardium, so
+Purkinje loses positive ion flux). Implementation in
+\texttt{PurkinjeCableSolver::Advance}:
+\texttt{i\_pvj\_p{[}fe{]}\ =\ pvj\_g\ *\ scale\ *\ (vp{[}fe{]}\ -\ Vm)}.
+Same sign as \texttt{BuildHeartCouplingCurrent} because both are added
+to their respective \texttt{I\_ion} term.
+\end{quote}
+
+\hypertarget{mapping-algorithm}{%
+\subsubsection{8.3 Mapping algorithm}\label{mapping-algorithm}}
+
+\texttt{PvjCoupler::BuildMapping}: 1. Each rank computes nearest local
+true DOF for each terminal. 2.
+\texttt{MPI\_Allreduce(MPI\_DOUBLE\_INT,\ MPI\_MINLOC)} selects the
+global owner. 3. Terminal-DOF pairs farther than
+\texttt{pvj\_max\_dist\_mm} are dropped. 4. Each owner appends a
+\texttt{LocalPvjLink\ \{purkinje\_node,\ heart\_tdof,\ dist\}} to its
+\texttt{local\_links\_}.
+
+Coordinate extraction uses MFEM \texttt{FunctionCoefficient} projected
+onto the P1 space, then \texttt{GetTrueDofs} --- guarantees exact match
+with monodomain DOFs.
+
+\hypertarget{optional-anatomical-delay}{%
+\subsubsection{8.4 Optional anatomical
+delay}\label{optional-anatomical-delay}}
+
+When \texttt{pvj\_delay\_ms\ \textgreater{}\ 0}: - After each Purkinje
+step, the current \(V_m\) at terminals is appended to a ring buffer
+(\texttt{PvjCoupler::AppendDelayedSample}). - The cable advance reads
+the sample with timestamp \(\le t_\mathrm{mid} -  \mathrm{delay}\)
+(\texttt{ReadDelayedSample}) --- implements a transport delay of
+\texttt{delay\_ms} between heart and Purkinje sampling.
+
+Buffer trim keeps history within \(4\times\) delay for safety.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{regional-ionic-dispatcher}{%
+\subsection{9. Regional ionic
+dispatcher}\label{regional-ionic-dispatcher}}
+
+\hypertarget{mapping}{%
+\subsubsection{9.1 Mapping}\label{mapping}}
+
+Mesh element attributes drive region assignment:
+
+\begin{longtable}[]{@{}lll@{}}
+\toprule\noalign{}
+Region & Cell model & Default config tag \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Ventricle & TT06 & \texttt{ventricle\_volume\_attrs} \\
+Atria & Grandi 2011 & \texttt{atria\_volume\_attrs} \\
+AV-delay & Passive & \texttt{av\_delay\_volume\_attrs} \\
+Fibrosis & Passive & \texttt{fibrosis\_volume\_attrs} \\
+\end{longtable}
+
+For each owned true DOF, the region with the \textbf{highest priority}
+among incident elements wins (priority order: AV-delay \textgreater{}
+Fibrosis \textgreater{} Atria \textgreater{} Ventricle). This guards
+against a DOF on a region boundary getting an inappropriate active
+model.
+
+\hypertarget{state-isolation-resolved-2026-05}{%
+\subsubsection{9.2 State isolation (resolved
+2026-05)}\label{state-isolation-resolved-2026-05}}
+
+Each child model is constructed with size =
+\texttt{LocalDofCount(region)}, NOT the full DOF count.
+\texttt{RegionalIonicModel::ComputeIion} and \texttt{AdvanceStates}
+gather \(V_m\) into a region-local buffer using
+\texttt{region\_indices\_{[}r{]}}, invoke the child on that buffer, and
+scatter the result back into the global I\_ion vector. So a child's
+per-DOF state index is \textbf{region-local}, never indexed by global
+true DOF.
+
+Empty regions still allocate a 1-DOF placeholder so the unique\_ptr is
+constructible, but that placeholder is never invoked because
+\texttt{per\_region\_count\_{[}r{]}\ ==\ 0} short-circuits the run path.
+
+Tested in \texttt{tests/test\_regional\_isolation.cpp}: a 1-D 4-element
+mesh with ventricle on elements 0-1 (TT06) and AV-delay on elements 2-3
+(Passive) verifies that (a) DOFs partition the tdof set, (b) Passive at
+V\_rest yields exactly 0 I\_ion, (c) repeated AdvanceStates with extreme
+ventricular V does not corrupt AV-delay output.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{verification-matrix}{%
+\subsection{10. Verification matrix}\label{verification-matrix}}
+
+Required tests (see \texttt{tests/}):
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3977}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.4886}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.1136}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Test
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Scope
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Status
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{test\_tt06\_single\_cell} & TT06 AP shape (existing) & ✓ pass \\
+\texttt{test\_stewart\_single\_cell} & Stewart AP physiological range &
+✗ WILL\_FAIL (compact port broken) \\
+\texttt{test\_purkinje\_cable\_smoke} & Cable diffusion correctness & ✓
+pass \\
+\texttt{test\_purkinje\_cable\_cv} & Cable CV \textasciitilde{} 2-3 m/s
+on 50 mm Stewart line & TODO \\
+\texttt{test\_pvj\_active\_sign} & PVJ depolarizes myocardium when
+\(V_p>V_m\) & TODO \\
+\texttt{test\_grandi2011\_single\_cell} & Atrial AP shape & TODO \\
+\texttt{test\_regional\_isolation} & Regional dispatch state isolation &
+TODO \\
+\end{longtable}
+
+End-to-end: - Full Niederer benchmark with regional + Purkinje (pending
+mesh tools). - Calibration sweep over \(g_{pvj}, \sigma_\mathrm{AV}\) vs
+target activation times (script: \texttt{tools/calibrate\_purkinje.py},
+TODO).
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{checkpoint-format}{%
+\subsection{11. Checkpoint format}\label{checkpoint-format}}
+
+\hypertarget{meta-file-chkpt_v3}{%
+\subsubsection{11.1 Meta file (CHKPT\_V3)}\label{meta-file-chkpt_v3}}
+
+Plain-text, written only by rank 0:
+
+\begin{verbatim}
+CHKPT_V3
+<world_size>
+<step>
+<t_ms>
+<model_id>
+\end{verbatim}
+
+\texttt{model\_id} is \texttt{IIonicModel::ModelId()} of the model that
+wrote the checkpoint. \texttt{LoadLatest} refuses to proceed if the
+runtime model's \texttt{ModelId()} does not match (or, for legacy V2/V0
+metas without \texttt{model\_id}, if the runtime model is not TT06).
+
+\hypertarget{shards}{%
+\subsubsection{11.2 Shards}\label{shards}}
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{vm\_rank\textless{}NNNNNN\textgreater{}.gf} ---
+  \texttt{mfem::ParGridFunction::Save} per rank.
+\item
+  \texttt{cell\_rank\textless{}NNNNNN\textgreater{}.bin} ---
+  \texttt{IIonicModel::SaveState} per rank. Binary layout is
+  model-specific; cross-model loads are caught by the model\_id check
+  before any binary is read.
+\end{itemize}
+
+\hypertarget{format-compatibility}{%
+\subsubsection{11.3 Format compatibility}\label{format-compatibility}}
+
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+Meta header & Status \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+CHKPT\_V3 & current, supported \\
+CHKPT\_V2 & TT06-only legacy; refused otherwise \\
+(legacy) & single-rank TT06 only \\
+\end{longtable}
+
+\hypertarget{verified-by}{%
+\subsubsection{11.4 Verified by}\label{verified-by}}
+
+\texttt{tests/test\_checkpoint\_model\_id.cpp}: writes a TT06
+checkpoint, then asserts \texttt{PassiveModel} LoadLatest returns false
+and a fresh \texttt{TT06Model} LoadLatest returns true with matching
+step/t\_ms.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{change-log-discipline}{%
+\subsection{12. Change-log discipline}\label{change-log-discipline}}
+
+Every commit touching algorithms in this stack must include a one-line
+note in the message body:
+
+\begin{verbatim}
+Math:    <equation/property changed>
+Code:    <file/function changed>
+Mapping: <how the verification stays sound>
+\end{verbatim}
+
+If a verification test no longer passes after a change, mark it
+\texttt{WILL\_FAIL} in the same commit and add a TODO line; do not
+silently relax the assertion.
+
+\end{document}

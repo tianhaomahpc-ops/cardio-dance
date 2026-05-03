@@ -1,0 +1,26 @@
+% Header for pandoc -> xelatex output. Liberation Serif provides bold/italic
+% variants (DejaVu Serif on this system ships only Book + Bold). Unicode
+% arrows / math symbols (↔, ⊗, ≤, ≥, …) that the body font lacks fall back
+% to DejaVu Sans, which carries the full BMP arrow block.
+\usepackage{fontspec}
+\setmainfont{Liberation Serif}
+\setsansfont{Liberation Sans}
+\setmonofont{Liberation Mono}[Scale=MatchLowercase]
+
+% Fallback for unicode glyphs missing in Liberation: route them through
+% DejaVu Sans so we never get a tofu box in the rendered PDF.
+\usepackage{newunicodechar}
+\newfontfamily{\arrowfont}{DejaVu Sans}
+\newunicodechar{↔}{{\arrowfont ↔}}
+\newunicodechar{→}{{\arrowfont →}}
+\newunicodechar{←}{{\arrowfont ←}}
+\newunicodechar{⊗}{{\arrowfont ⊗}}
+\newunicodechar{≤}{{\arrowfont ≤}}
+\newunicodechar{≥}{{\arrowfont ≥}}
+\newunicodechar{✓}{{\arrowfont ✓}}
+\newunicodechar{✗}{{\arrowfont ✗}}
+\newunicodechar{≈}{{\arrowfont ≈}}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{fancyvrb}
