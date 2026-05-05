@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# commit-msg hook: when a commit touches algorithm-bearing source directories
+# (src/ode/, src/solver/, src/space/, src/coupling/), require the commit
+# message to include Math: and Mapping: tags so reviewers can audit math/code
+# drift in one diff.
+#
+# Install: from repo root, run
+#   git config core.hooksPath .githooks
+# (or symlink: ln -sf ../../.githooks/commit-msg .git/hooks/commit-msg)
+#
+# Bypass (very rarely justified):
+#   git commit --no-verify
+# Use only after coordinating with maintainers; "no-verify" abuse defeats
+# the entire change-log discipline described in docs/purkinje_numerics.md
+# section 12.
+
+set -u
+
+msg_file="${1:?commit message file path missing}"
+
+# Regex listing directories whose edits demand Math:/Mapping: tags.
+# Anchored at start of path so unrelated paths (docs/, tests/, tools/, config/,
+# CMakeLists.txt, etc.) are not policed.
+algo_dirs_re='^(src/ode/|src/solver/|src/space/|src/coupling/)'
+
+# `git diff --cached --name-only` lists files staged for THIS commit.
+# (`git diff HEAD --name-only` would also show unstaged work; we only care
+# about what's about to ship.)
+staged_files=$(git diff --cached --name-only --diff-filter=ACMRT 2>/dev/null || true)
+algo_touched=$(echo "$staged_files" | grep -E "$algo_dirs_re" || true)
+
+if [[ -z "$algo_touched" ]]; then
+    # No algorithm-bearing code is touched -- accept any message.
+    exit 0
+fi
+
+# Strip lines starting with '#' (git commentary) before checking.
+msg_body=$(grep -v '^#' "$msg_file" || true)
+
+require_tag() {
+    local tag="$1"
+    if ! echo "$msg_body" | grep -Eiq "^[[:space:]]*${tag}:"; then
+        cat >&2 <<EOF
+[commit-msg] Missing required tag: ${tag}:
+This commit edits algorithm-bearing files:
+$(echo "$algo_touched" | sed 's/^/    /')
+
+Commits that touch src/{ode,solver,space,coupling}/ MUST include both a
+'Math:' and a 'Mapping:' line in the commit body. Suggested template:
+
+    <subject line>
+
+    Math:    <equation/property changed; 1-3 sentences>
+    Code:    <file/function changed; concrete paths>
+    Mapping: <how verification stays sound: which test guards this,
+              which doc section was updated>
+
+See docs/purkinje_numerics.md section 12 for rationale.
+
+To bypass (rare): git commit --no-verify
+EOF
+        return 1
+    fi
+}
+
+errors=0
+require_tag "Math"    || errors=$((errors+1))
+require_tag "Mapping" || errors=$((errors+1))
+
+exit $errors

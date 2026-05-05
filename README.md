@@ -218,3 +218,36 @@ Detailed workflow and literature-comparison checklist:
 - `docs/wholebody_workflow.md`
 - `docs/literature_comparison.md`
 - `docs/petsc_asm_geometric_report.md`
+
+## Navigation
+
+For fast lookup of class → file → test, see `docs/code_map.md`. The
+mathematical source-of-truth for the Purkinje + PVJ + Regional stack lives
+in `docs/purkinje_numerics.md` (typeset PDF: `docs/purkinje_numerics.pdf`,
+rebuilt via `make -C docs pdf`).
+
+## Developer setup: enable repo-tracked git hooks
+
+The repository ships a `commit-msg` hook in `.githooks/` that requires
+commits touching `src/{ode,solver,space,coupling}/` to include `Math:` and
+`Mapping:` tags in the commit body. This enforces the change-log
+discipline described in `docs/purkinje_numerics.md` §12.
+
+Activate the hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+To verify the hook is live, run a self-test:
+
+```bash
+echo "tweak" > src/ode/__hook_test  # touch an algorithm-bearing path
+git add src/ode/__hook_test
+git commit -m "no tags"             # expect rejection
+# clean up
+git restore --staged src/ode/__hook_test && rm src/ode/__hook_test
+```
+
+Bypass with `git commit --no-verify` only after explicitly coordinating
+with maintainers — abusing it defeats the entire change-log discipline.
