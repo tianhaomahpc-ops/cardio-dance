@@ -67,6 +67,9 @@ target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 add_executable(generate_half_ellipsoid_case tools/generate_half_ellipsoid_case.cpp)
 target_link_libraries(generate_half_ellipsoid_case PRIVATE monodomain_core)
 
+add_executable(finalize_half_ellipsoid_mesh tools/finalize_half_ellipsoid_mesh.cpp)
+target_link_libraries(finalize_half_ellipsoid_mesh PRIVATE monodomain_core)
+
 add_executable(debug_stewart_currents tools/debug_stewart_currents.cpp)
 target_link_libraries(debug_stewart_currents PRIVATE monodomain_core)
 
