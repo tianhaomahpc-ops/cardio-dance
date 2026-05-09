@@ -71,8 +71,11 @@ pseudo_ecg_sigma_i_mS_per_mm=0.174
 pseudo_ecg_sigma_b_mS_per_mm=0.2
 pseudo_ecg_stride=10
 
-# Solver
-use_petsc=0
+# Solver: PETSc CG + ASM(overlap=0, ICC(0) sub-PC) is the project default.
+# Activate with PETSC_OPTIONS="$(grep -v '^##\\|^$' config/petsc_asm.opts | tr '\\n' ' ')"
+# 10x fewer KSP iters than plain CG on this problem -- see
+# docs/petsc_asm_vs_cg_iter_bench.md.
+use_petsc=1
 use_hypre_boomeramg=0
 use_hypre_block_jacobi=0
 ksp_max_it=500
