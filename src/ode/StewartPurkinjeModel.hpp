@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iosfwd>
+#include <string>
 #include <vector>
 
 #include "mfem.hpp"
@@ -9,27 +10,33 @@
 
 namespace mono {
 
-// Stewart-Aslanidi-Boyett-Zhang 2009 Purkinje cell model.
+// Stewart-Aslanidi-Noble-Noble-Boyett-Zhang 2009 Purkinje cell model.
 //
-// !!! KNOWN BROKEN (2026-05) !!!
-// This is a hand-port from the Stewart 2009 paper, NOT a CellML-generated
-// source-of-truth. Single-cell tests show non-physiological AP peaks (~+120
-// mV vs paper ~+30 mV); see tests/test_stewart_single_cell.cpp. Suspected
-// cause: I_CaL GHK driving-force expression (V-15 instead of V) and missing
-// 0.341 inward Ca correction. DO NOT USE for scientific results.
-// TODO: replace with CellML-codegen output (see docs/purkinje_numerics.md
-// section "Importing CellML reference code").
+// Implementation delegates to the CellML codegen output in
+// ode/stewart_generated.{h,c}; this class only manages per-DOF state
+// storage and applies the Rush-Larsen + Forward Euler operator-split
+// integration that mirrors TT06Model. The codegen is the source-of-truth
+// for the equations; do not hand-edit those files.
 //
-// 20 state variables, Rush-Larsen for gating and Forward Euler for
-// concentrations -- mirrors the TT06Model integration scheme. Currents include
-// I_Na, I_CaL, I_to, I_Ks, I_Kr, I_K1, I_NaCa, I_NaK, I_pCa, I_pK, I_bNa,
-// I_bCa, I_f (HCN funny current responsible for automaticity), I_sus.
+// State layout (matches codegen):
+//   STATES[0]  = V_m
+//   STATES[1]  = K_i        STATES[11] = Ca_ss
+//   STATES[2]  = Na_i       STATES[12] = d
+//   STATES[3]  = Ca_i       STATES[13] = f
+//   STATES[4]  = y          STATES[14] = f2
+//   STATES[5]  = Xr1        STATES[15] = fCass
+//   STATES[6]  = Xr2        STATES[16] = s
+//   STATES[7]  = Xs         STATES[17] = r
+//   STATES[8]  = m          STATES[18] = Ca_SR
+//   STATES[9]  = h          STATES[19] = R_prime
+//   STATES[10] = j
 class StewartPurkinjeModel : public IIonicModel {
  public:
   explicit StewartPurkinjeModel(int n_local_true_dofs);
 
   void InitializeRestState(double v_rest_mv) override;
-  void ComputeIion(const mfem::Vector& vm_true, mfem::Vector& iion_true) const override;
+  void ComputeIion(const mfem::Vector& vm_true,
+                   mfem::Vector& iion_true) const override;
   void AdvanceStates(double dt_pde_ms, double dt_ode_ms,
                      const mfem::Vector& vm_next_true) override;
 
@@ -40,29 +47,27 @@ class StewartPurkinjeModel : public IIonicModel {
   std::string ModelId() const override { return "Stewart2009"; }
 
  private:
-  // 20 states match the Stewart 2009 CellML ordering used here:
-  //   [0]V, [1]m, [2]h, [3]j, [4]xr1, [5]xr2, [6]xs, [7]r, [8]s, [9]d,
-  //   [10]f, [11]f2, [12]fCass, [13]y, [14]Cai, [15]CaSR, [16]CaSS,
-  //   [17]Nai, [18]Ki, [19]Rprime
   static constexpr int kNumStates = 20;
+  static constexpr int kNumRates = 20;
+  static constexpr int kNumConsts = 52;
+  static constexpr int kNumAlg = 76;
 
-  // Per-node state stored contiguously: states_[node*kNumStates + i].
   int n_nodes_;
   std::vector<double> states_;
+  std::vector<double> rates_;
+  std::vector<double> constants_;
 
- public:
-  // Single shared parameter set; Stewart cells in this codebase are uniform.
-  // Constants follow Stewart 2009 (units: mV, ms, mM, uA/uF, mS/uF).
-  struct Constants;
-  static const Constants& Params();
+  double* StatePtr(int node) { return states_.data() + node * kNumStates; }
+  const double* StatePtr(int node) const {
+    return states_.data() + node * kNumStates;
+  }
+  double* RatePtr(int node) { return rates_.data() + node * kNumRates; }
+  double* ConstPtr(int node) { return constants_.data() + node * kNumConsts; }
+  const double* ConstPtr(int node) const {
+    return constants_.data() + node * kNumConsts;
+  }
 
- private:
-
-  // Per-node ionic-current evaluation. Returns I_ion (uA/uF) at the given
-  // (V, state). When advance_state is non-null, also populates the differential
-  // updates so callers can integrate without recomputing currents.
-  static double ComputeNodeIion(double V, const double* s);
-  static void StepNode(double V, double dt, double* s);
+  static double RushLarsenUpdate(double x, double x_inf, double tau, double dt);
 };
 
 }  // namespace mono

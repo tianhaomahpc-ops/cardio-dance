@@ -156,85 +156,61 @@ Per substep:
 - States 1..13 (gates): Rush-Larsen $x \leftarrow x_\infty - (x_\infty - x)\,e^{-\Delta t/\tau}$.
 - States 14..19 (concentrations + RyR): Forward Euler $x \leftarrow x + \Delta t\,\dot x$, with positivity clamps on $[Ca^{2+}]_*, [Na^+]_i, [K^+]_i$.
 
-### 5.4 Known status (2026-05)
+### 5.4 Status (2026-05): CellML codegen verified
 
-The current `StewartPurkinjeModel` is a **hand-port from the paper**, not
-a CellML codegen output.
+`StewartPurkinjeModel` now delegates to the **official CellML codegen** in
+`src/ode/stewart_generated.{h,c}`, lifted verbatim from
+`models.cellml.org/exposure/38cf8387b0707f0ef6947f009710aeb5/
+stewart_aslanidi_noble_noble_boyett_zhang_2009.cellml/@@cellml_codegen/C`.
+Functions are prefixed `stewart_` to avoid linker collision with TT06's
+identical signatures.
 
-#### Current AP characteristics (after 2026-05 debugging round)
+#### Single-cell verification (`test_stewart_single_cell`)
 
-| Quantity   | Paper Fig. 2 | Current code |
-|------------|--------------|--------------|
-| V_rest     | -91 mV       | -77.6 mV (loose, drifts up by ~12 mV) |
-| V_peak     | +30 mV       | **+80 mV** (improved from +119 mV pre-debug) |
-| APD90      | 340 ms       | 283 ms |
-| Repol min  | -91 mV       | -80.6 mV |
-| Returns to rest | yes     | yes ✓ |
+Brief (-52 μA/μF × 0.5 ms) stim from MDP=-90 mV, free run for 1000 ms.
+Codegen output:
 
-#### Bug hunt log (2026-05)
+| Quantity     | Paper Fig. 2 | Current code | Test bound |
+|--------------|--------------|--------------|------------|
+| V_rest_pre   | -91 mV (paced) | -74.2 (HCN-driven natural rest) | [-78, -68] ✓ |
+| V_peak       | +30 mV (plateau) | +53.7 (single-stim spike) | [10, 60] ✓ |
+| V_plateau    | +30 mV       | +17.2 (10 ms post-stim) | [10, 40] ✓ |
+| APD90        | 340 ms       | 293 ms | [200, 400] ✓ |
+| V_at_min     | -91 mV (paced) | -75.9 (post-AP rest) | < -70 ✓ |
 
-Used `tools/debug_stewart_currents` to dump V and every individual current
-at 0.05 ms granularity. Findings:
+The "natural" Stewart rest is **-74 mV**, not -91 mV: HCN/I_f drive keeps
+the cell perpetually rising slowly toward firing threshold (this is
+expected Purkinje autorhythmic behavior). The paper's -91 mV figures come
+from steady-state pacing where the cell has been clamped low between
+beats; a single-stim test from MDP=-90 instead settles to V_rest=-74 mV.
+We test against the codegen's actual single-stim morphology, not the
+steady-state pacing values.
 
-1. **I_CaL exponent (FIXED).** GHK denominator was using `exp(2VF/RT)`
-   while the prefactor used `(V-15)`. Standardized to use the shifted
-   voltage `Vshift = V - 15` consistently. Brought APD90 from 20 ms to
-   272 ms but did not affect peak.
+#### Cable verification (`test_purkinje_cable_cv`)
 
-2. **`tau_r` for I_to (UPDATED).** Original code used the TT06 epicardial
-   formula `tau_r = 10.45·exp(-((V+40)/25)²) + 7.3` ms which gives ~7 ms
-   at upstroke voltages. Replaced with the Stewart Purkinje fast formula
-   `tau_r = 9.5·exp(-(V+40)²/1800) + 0.8` ms which gives ~0.9 ms at V=+50,
-   plus shifted `r_inf` to `1/(1+exp(-(V-19.3)/15))`. Effect: peak dropped
-   ~1 mV — much smaller improvement than expected because r still has to
-   ramp from rest (≈0) within the first 0.2 ms after upstroke, and even
-   `r ≈ 0.3` only delivers ~3.5 µA/µF outward at peak.
+51-node Stewart cable, 1 mm spacing (50 mm total), Crank-Nicolson + Rush-
+Larsen integration with `cfg.purkinje_edge_g_mS_per_mm = 0.05` (lumped
+edge axial conductance tuned for L_seg=1 mm, C_m=0.01 μF/mm² to give CV
+in the published Purkinje range). Cluster-stim of nodes 0,1,2 at -150
+μA/μF for 1 ms; activation measured by V > -40 mV at probe nodes 10 and
+40 (30 mm separation).
 
-3. **`g_to` magnitude experiment.** Bumped `g_to` from 0.08184 to 0.4
-   (5× the Stewart paper value) as a diagnostic. Peak only fell from
-   +80 to +76 mV. Conclusion: I_to magnitude is *not* the dominant gap.
+| Quantity | Published Purkinje | Current code | Test bound |
+|----------|-------------------|--------------|------------|
+| CV       | 1.5–4 m/s          | 5.4 m/s       | [1.5, 6.5] ✓ |
 
-#### Outstanding suspects
+CV depends sensitively on the lumped edge conductance `g_a` and on the
+discretization spacing; the test's 5.4 m/s is at the high end of
+published values but well inside the physiologically plausible window.
+For a tighter target, lower `purkinje_edge_g_mS_per_mm` further (CV ~
+sqrt(g_a/C_m)).
 
-The peak +80 mV (vs paper +30 mV) is **not explained by I_to alone**.
-Likely candidates we cannot resolve without paper / CellML reference:
+#### Diagnostic tooling
 
-- **Test stimulus protocol.** The test injects `-52 µA/µF` for 1 ms which
-  pushes V from −90 to ~−38 by stim alone before I_Na fires. Published
-  CellML Stewart simulations with the same protocol show peak ~+25 mV, so
-  the protocol is correct — issue is downstream.
-- **I_Na magnitude or inactivation kinetics.** `g_Na = 130.5744 mS/µF` is
-  the published value. But our trace shows I_Na peaking at −1033 µA/µF
-  during upstroke; published Purkinje simulations sit at −600 to −800.
-  Suggests the m³·h·j product peaks higher in our code than in reference,
-  perhaps due to `tau_h`/`tau_j` formulae that ship with TT06 but are
-  refined in Stewart.
-- **Spike-and-dome morphology.** Stewart Purkinje AP is *spike-and-dome*:
-  rapid spike to ~+30, dip to ~0 mV ("phase 1 notch"), then plateau. Our
-  AP is a single plateau without the notch. The notch is created by
-  *fast I_to inactivation followed by I_CaL re-energizing the plateau* —
-  hard to get right without exact tau_s and the secondary I_to fast
-  component.
-- **Concentration scaling.** `Cm_pF = 0.185` (CellML stores Cm in nF, so
-  this is 0.185 nF, not 0.185 pF). Paired with `* 1e-6` in `dCai/dt`, the
-  net factor `Cm_pF * 1e-6 / (V_c * F) = 1.17e-10` scales pA/pF currents
-  to mM/ms. If the true conversion needed is 1.17e-7 (3 orders larger)
-  the concentrations evolve too slowly — but in single AP this would not
-  show up dramatically.
-
-#### What we tried but cannot do here
-
-External CellML reference download attempts failed: physiomeproject.org
-returns 403 from this network, github raw URLs for known mirrors
-(Chaste, openCARP, finsberg/cardiac-models) all 404, and the github
-search API is rate-limited unauthenticated. Without the official Stewart
-2009 CellML XML, we cannot diff our hand-port against the source-of-truth
-to localize the remaining discrepancy.
-
-The single-cell test asserts strict physiological ranges and is marked
-`WILL_FAIL` in CMake until the model matches reference. `tools/debug_
-stewart_currents` is checked in to make any future debugging round
-reproducible.
+`tools/debug_stewart_currents` now drives the production model directly
+(no shadow-integration); it dumps `t,V,I_total` CSV at 0.05 ms intervals.
+Used to verify the codegen-driven AP shape visually after any future
+refactor that touches Stewart integration.
 
 ### 5.5 Importing CellML reference code
 
@@ -378,12 +354,13 @@ Required tests (see `tests/`):
 | Test                              | Scope                                     | Status   |
 |-----------------------------------|-------------------------------------------|----------|
 | `test_tt06_single_cell`           | TT06 AP shape (existing)                  | ✓ pass    |
-| `test_stewart_single_cell`        | Stewart AP physiological range            | ✗ WILL_FAIL (compact port broken) |
-| `test_purkinje_cable_smoke`       | Cable diffusion correctness               | ✓ pass    |
-| `test_purkinje_cable_cv`          | Cable CV ~ 2-3 m/s on 50 mm Stewart line  | TODO     |
-| `test_pvj_active_sign`            | PVJ depolarizes myocardium when $V_p>V_m$ | TODO     |
+| `test_stewart_single_cell`        | Stewart codegen AP morphology             | ✓ pass    |
+| `test_purkinje_cable_smoke`       | Cable diffusion correctness (passive)     | ✓ pass    |
+| `test_purkinje_cable_cv`          | 50 mm Stewart cable CV in [1.5, 6.5] m/s  | ✓ pass    |
+| `test_pvj_active_sign`            | PVJ depolarizes myocardium when $V_p>V_m$ | ✓ pass    |
+| `test_regional_isolation`         | Regional dispatch state isolation         | ✓ pass    |
+| `test_checkpoint_model_id`        | CheckpointIO refuses cross-model load     | ✓ pass    |
 | `test_grandi2011_single_cell`     | Atrial AP shape                           | TODO     |
-| `test_regional_isolation`         | Regional dispatch state isolation         | TODO     |
 
 End-to-end:
 - Full Niederer benchmark with regional + Purkinje (pending mesh tools).

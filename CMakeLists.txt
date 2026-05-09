@@ -30,6 +30,7 @@ add_library(monodomain_core
   src/io/OutputManager.cpp
   src/io/CheckpointIO.cpp
   src/ode/tt06_generated.c
+  src/ode/stewart_generated.c
 )
 
 target_include_directories(monodomain_core
@@ -88,9 +89,6 @@ add_test(NAME wholebody_smoke COMMAND test_wholebody_smoke)
 add_executable(test_stewart_single_cell tests/test_stewart_single_cell.cpp)
 target_link_libraries(test_stewart_single_cell PRIVATE monodomain_core)
 add_test(NAME stewart_single_cell COMMAND test_stewart_single_cell)
-# Compact Stewart port is known to fail strict physiological asserts -- mark
-# WILL_FAIL so CI signals when the model finally matches CellML reference.
-set_tests_properties(stewart_single_cell PROPERTIES WILL_FAIL TRUE)
 
 add_executable(test_purkinje_cable_smoke tests/test_purkinje_cable_smoke.cpp)
 target_link_libraries(test_purkinje_cable_smoke PRIVATE monodomain_core)
@@ -99,9 +97,6 @@ add_test(NAME purkinje_cable_smoke COMMAND test_purkinje_cable_smoke)
 add_executable(test_purkinje_cable_cv tests/test_purkinje_cable_cv.cpp)
 target_link_libraries(test_purkinje_cable_cv PRIVATE monodomain_core)
 add_test(NAME purkinje_cable_cv COMMAND test_purkinje_cable_cv)
-# CV depends on Stewart upstroke kinetics; broken Stewart port may yield
-# anomalous CV. Mark WILL_FAIL until reference Stewart lands.
-set_tests_properties(purkinje_cable_cv PROPERTIES WILL_FAIL TRUE)
 
 add_executable(test_pvj_active_sign tests/test_pvj_active_sign.cpp)
 target_link_libraries(test_pvj_active_sign PRIVATE monodomain_core)
