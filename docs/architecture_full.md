@@ -468,3 +468,115 @@ conforming 模式下，heart/torso 接口节点可精确对齐，映射距离应
   - 继续优化 parent-id 直连映射（减少通信量，避免全局 allgather）
   - 使用精确界面施加（非 penalty 的对称消元或混合方法）
   - ECG 电极采样/12 导联模块标准化。
+
+## 14. Purkinje + PVJ + 区域性离子模型扩展（新增）
+
+详细数学见 `docs/purkinje_numerics.md`，本节给项目结构层面的概览。
+
+### 14.1 新增模块
+
+`src/ode/`：
+- `IIonicModel.hpp` — 抽象基类（`InitializeRestState / ComputeIion / AdvanceStates / SaveState / LoadState / NumNodes / ModelId`）
+- `TT06Model` — 已存在，改为继承 IIonicModel
+- `StewartPurkinjeModel` + `stewart_generated.{h,c}` — Stewart 2009 Purkinje，CellML codegen 来自 models.cellml.org，`stewart_` 前缀避免与 `tt06_generated.c` 撞名
+- `Grandi2011Model` — 心房模型 15-state 简版（无 verification 测试）
+- `PassiveModel` — 仅泄漏电流，AV-delay/纤维化区使用
+- `RegionalIonicModel` — 按 mesh 体属性分发到不同子模型；区域专属状态（fix 早期 state-pollution bug）
+
+`src/solver/`：
+- `PurkinjeCableSolver` — 1D FE on graph：lumped mass + Crank-Nicolson 扩散 + Rush-Larsen 反应；从 `.network` 文件读图结构
+- `PvjCoupler` — 双向 PVJ 缝隙连接电流注入：终端→最近 myocardium DOF（MPI MINLOC）+ 可选 smear 半径解决 3D 源-汇失配 + 可选解剖延迟环形缓冲
+
+`src/io/`：
+- `PseudoEcg` — 元素质心积分远场公式 $\phi=\frac{\sigma_i}{4\pi\sigma_b}\int \nabla V_m \cdot \hat r/r^2$；多探针 → CSV 多列
+
+### 14.2 数据流
+
+```
+Purkinje stim →  PurkinjeCableSolver (1D Stewart cable)
+                       │
+                       ▼
+                  PvjCoupler.AdvancePurkinje (each PDE step):
+                    采集 V_m(anchor) 经 MPI Allreduce → cable.Advance
+                       │
+                       ▼
+              MonodomainStepper.StepNoCorrection:
+                BuildHeartCouplingCurrent → I_pvj 注入心脏 RHS
+                               │
+                               ▼
+                   Crank-Nicolson 扩散 + Rush-Larsen 反应
+```
+
+### 14.3 PVJ smear
+
+`pvj_smear_radius_mm > 0` 时把每个终端的电流分布在 owner rank 上 R 半径内的所有本地 DOF（uniform weight = 1/N），总注入量不变。这是修 3D 单 DOF 源被邻居引流（source-sink mismatch）的标准做法。
+
+### 14.4 区域离子模型分发
+
+`RegionalIonicModel` 按 mesh 元素 attribute 分四类：
+- attr ∈ `ventricle_volume_attrs` → `TT06Model`
+- attr ∈ `atria_volume_attrs` → `Grandi2011Model`
+- attr ∈ `av_delay_volume_attrs` → `PassiveModel`（低电导率泄漏）
+- attr ∈ `fibrosis_volume_attrs` → `PassiveModel`（中电导率泄漏）
+
+子模型只持有自己 region 的 DOF 状态（不再像早期版那样全 DOF 都跑），避免污染相邻区域。`Assembler` 装配 K 时按 attribute 用 `PWConstCoefficient × FiberTensor` 缩放，实现 AV-delay 慢传导和纤维化降低传导。
+
+### 14.5 IIonicModel 接口的下游影响
+
+- `MonodomainStepper` 持有 `IIonicModel&`（不再写死 TT06）
+- `CheckpointIO` 用 `IIonicModel.SaveState/LoadState`，元数据存 `ModelId()` 字符串；跨模型 reload 在 `LoadLatest` 中被显式拒绝（`CHKPT_V3` 格式）
+- 新模型添加只需在 CMake 注册 + 在 RegionalIonicModel 里加一个分发分支
+
+## 15. 半椭球 LV demo + 伪 ECG（新增）
+
+### 15.1 几何工具链
+
+- `tools/half_ellipsoid.geo` — gmsh OpenCASCADE CSG（外椭球减内椭球，再交 x≥0 半空间），输出 tet `.msh`
+- `tools/finalize_half_ellipsoid_mesh.cpp` — 加载 `.msh`，按面心到 outer/inner/base 的距离重分类边界三角形（gmsh 的 BoundingBox 启发法对曲面不可靠），输出 MFEM `.mesh` + 可选恒向量 fiber `.gf`
+- `tools/generate_purkinje_tree.py` — Costabal 2016 风格分形树生成器，bbox 约束树在心腔内生长
+
+旧的 `tools/generate_half_ellipsoid_case.cpp`（从笛卡儿盒切壳）保留作参考，但产生阶梯状边界，已被 gmsh 路线替代。
+
+### 15.2 配置示例
+
+`config/half_ellipsoid_purkinje.options`：无直接心肌 stim，激活完全经 Purkinje + PVJ。默认开启 `use_petsc=1`，跑 PETSc CG + ASM(0)/ICC(0)。
+
+### 15.3 可视化工具
+
+- `tools/plot_pseudo_ecg.py` — matplotlib 单导联 ECG
+- `tools/plot_vm_movie.py` — pyvista + ffmpeg V_m 电影（可选 Purkinje 树叠加 + y=0 切片）
+- `tools/plot_vm_gallery.py` — 多角度截面 + mesh wireframe 静帧库
+
+依赖运行环境 `python venv` 装 pyvista/matplotlib，xvfb 提供 off-screen GL，ffmpeg 编码 mp4。
+
+### 15.4 已知边界
+
+- Fiber 当前是恒向量（`(1,0,0) (0,1,0) (0,0,1)` 处处一致），不是真实 Streeter 螺旋。CV 沿 fiber 比横向快 √(σ_f/σ_t) ≈ 2.75×，但方向是固定的 +x。详见 `purkinje_numerics.md` §13。
+- Stewart 自然静息约 −74 mV（由 HCN 自动节律决定），不是文献里 paced 实验的 −91 mV。
+- ECG 信号是任意单位（σ_i / σ_b 无校准）；要绝对 mV 级幅值需要真实躯干电导率模型。
+
+## 16. 线性求解 backend（新增）
+
+`LinearSystemSolver` 现支持四种 backend，按配置切换：
+
+| Config | Backend |
+|---|---|
+| `use_petsc=1`（项目默认） | PETSc KSP，options 走 `PETSC_OPTIONS` 环境变量，默认 ASM(overlap=0) + ICC(0) sub-PC |
+| `use_hypre_boomeramg=1` | MFEM CG + HypreBoomerAMG |
+| `use_hypre_block_jacobi=1` | MFEM CG + HypreSmoother (l1-Jacobi) |
+| 全 0 | 纯 MFEM CG（无预条件器） |
+
+CN 系统 $A = \chi C_m/\Delta t \cdot M + 0.5 K$ 是 SPD（M、K 均 SPD），所以 ICC(0) 是数学上的最佳子 PC。
+
+### 16.1 性能对比（21k 节点 / 124k tet 半椭球，单 rank）
+
+详见 `docs/petsc_asm_vs_cg_iter_bench.md`：
+
+- 纯 CG：mean 50 iter/step，墙时 61.5 s（20 ms 仿真）
+- PETSc CG + ASM(0)/ICC(0)：mean 5 iter/step，墙时 58.7 s
+
+迭代次数减 10×，墙时仅减 5%（每个 ASM iter 比 CG iter 贵）。在更大网格 / 更多 rank 上 ASM 优势会拉开。
+
+### 16.2 编译要求
+
+PETSc backend 需要 MFEM 编译时启用 `MFEM_USE_PETSC=YES`。在 sandbox / Ubuntu 24.04 上的具体步骤见 `README.md` Path B。
