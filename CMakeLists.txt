@@ -29,6 +29,7 @@ add_library(monodomain_core
   src/coupling/InterfaceMapper.cpp
   src/io/OutputManager.cpp
   src/io/CheckpointIO.cpp
+  src/io/PseudoEcg.cpp
   src/ode/tt06_generated.c
   src/ode/stewart_generated.c
 )
@@ -62,6 +63,9 @@ target_link_libraries(generate_conforming_wholebody_case PRIVATE monodomain_core
 
 add_executable(generate_mesh_attr_gf tools/generate_mesh_attr_gf.cpp)
 target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
+
+add_executable(generate_half_ellipsoid_case tools/generate_half_ellipsoid_case.cpp)
+target_link_libraries(generate_half_ellipsoid_case PRIVATE monodomain_core)
 
 add_executable(debug_stewart_currents tools/debug_stewart_currents.cpp)
 target_link_libraries(debug_stewart_currents PRIVATE monodomain_core)

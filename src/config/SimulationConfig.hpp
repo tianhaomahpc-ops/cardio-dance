@@ -123,6 +123,21 @@ struct SimulationConfig {
   // Optional anatomical delay buffer between Purkinje and ventricular sampling.
   double pvj_delay_ms = 0.0;
 
+  // ---- Pseudo-ECG far-field probe -----------------------------------------
+  // Repeat `pseudo_ecg_probe = name,x,y,z` (mm) once per lead.
+  bool enable_pseudo_ecg = false;
+  struct EcgProbe {
+    std::string name;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+  };
+  std::vector<EcgProbe> pseudo_ecg_probes;
+  double pseudo_ecg_sigma_i_mS_per_mm = 0.174;
+  double pseudo_ecg_sigma_b_mS_per_mm = 0.2;
+  int pseudo_ecg_stride = 5;
+  std::string pseudo_ecg_csv = "pseudo_ecg.csv";  // relative to output_dir
+
   // ---- Regional ionic model dispatch --------------------------------------
   bool enable_regional_ionic = false;
   std::vector<int> atria_volume_attrs;

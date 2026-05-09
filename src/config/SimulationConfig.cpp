@@ -218,6 +218,26 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "av_delay_leak_g_mS_per_uF") cfg.av_delay_leak_g_mS_per_uF = std::stod(val);
     else if (key == "fibrosis_leak_g_mS_per_uF") cfg.fibrosis_leak_g_mS_per_uF = std::stod(val);
     else if (key == "passive_v_rest_mv") cfg.passive_v_rest_mv = std::stod(val);
+    // Pseudo-ECG
+    else if (key == "enable_pseudo_ecg") cfg.enable_pseudo_ecg = ParseBool(val);
+    else if (key == "pseudo_ecg_sigma_i_mS_per_mm") cfg.pseudo_ecg_sigma_i_mS_per_mm = std::stod(val);
+    else if (key == "pseudo_ecg_sigma_b_mS_per_mm") cfg.pseudo_ecg_sigma_b_mS_per_mm = std::stod(val);
+    else if (key == "pseudo_ecg_stride") cfg.pseudo_ecg_stride = std::stoi(val);
+    else if (key == "pseudo_ecg_csv") cfg.pseudo_ecg_csv = val;
+    else if (key == "pseudo_ecg_probe") {
+      const auto tokens = SplitCsv(val);
+      if (tokens.size() != 4) {
+        throw std::runtime_error(
+            "pseudo_ecg_probe expects 4 fields name,x,y,z at line " +
+            std::to_string(line_no));
+      }
+      SimulationConfig::EcgProbe p;
+      p.name = tokens[0];
+      p.x = std::stod(tokens[1]);
+      p.y = std::stod(tokens[2]);
+      p.z = std::stod(tokens[3]);
+      cfg.pseudo_ecg_probes.push_back(p);
+    }
     else {
       throw std::runtime_error("Unknown config key: " + key);
     }

@@ -18,6 +18,7 @@
 #include "coupling/InterfaceMapper.hpp"
 #include "io/CheckpointIO.hpp"
 #include "io/OutputManager.hpp"
+#include "io/PseudoEcg.hpp"
 #include "ode/RegionalIonicModel.hpp"
 #include "ode/StewartPurkinjeModel.hpp"
 #include "ode/TT06Model.hpp"
@@ -207,6 +208,27 @@ int main(int argc, char* argv[]) {
 
       mono::OutputManager output(cfg, assembler, ue_solver.get(), torso_solver.get());
       mono::CheckpointIO checkpoint(cfg, MPI_COMM_WORLD);
+
+      // Optional pseudo-ECG probes.
+      std::unique_ptr<mono::PseudoEcg> pseudo_ecg;
+      if (cfg.enable_pseudo_ecg && !cfg.pseudo_ecg_probes.empty()) {
+        std::vector<mono::PseudoEcg::Probe> probes;
+        for (const auto& p : cfg.pseudo_ecg_probes) {
+          probes.push_back({p.name, p.x, p.y, p.z});
+        }
+        const std::string ecg_path =
+            (std::filesystem::path(cfg.output_dir) / cfg.pseudo_ecg_csv).string();
+        pseudo_ecg = std::make_unique<mono::PseudoEcg>(
+            MPI_COMM_WORLD, assembler.PFES(), probes,
+            cfg.pseudo_ecg_sigma_i_mS_per_mm,
+            cfg.pseudo_ecg_sigma_b_mS_per_mm,
+            ecg_path);
+        if (rank == 0) {
+          std::cout << "[pseudo_ecg] " << probes.size()
+                    << " probes -> " << ecg_path << std::endl;
+        }
+      }
+
       const bool output_enabled = (cfg.output_stride > 0);
       const bool checkpoint_enabled = (cfg.checkpoint_stride > 0);
       std::ofstream ksp_log;
@@ -510,6 +532,9 @@ int main(int argc, char* argv[]) {
                       (cfg.enable_wholebody ? &torso_solver->UTTrue() : nullptr));
           output_ms_local = std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
         }
+        if (pseudo_ecg) {
+          pseudo_ecg->Sample(stepper.TimeMs(), assembler.Vm());
+        }
 
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();
@@ -561,6 +586,26 @@ int main(int argc, char* argv[]) {
                       (cfg.enable_wholebody ? &ue_solver->UeTrue() : nullptr),
                       (cfg.enable_wholebody ? &torso_solver->UTTrue() : nullptr));
           output_ms_local = std::chrono::duration<double, std::milli>(Clock::now() - io_t0).count();
+        }
+        if (pseudo_ecg && cfg.pseudo_ecg_stride > 0 &&
+            stepper.StepCount() % cfg.pseudo_ecg_stride == 0) {
+          pseudo_ecg->Sample(stepper.TimeMs(), assembler.Vm());
+        }
+        if (cable && rank == 0 && save_output_frame) {
+          double vp_max = -1e9, vp_min = 1e9;
+          const auto& vp = cable->Vm();
+          for (int j = 0; j < vp.Size(); ++j) {
+            vp_max = std::max(vp_max, vp[j]);
+            vp_min = std::min(vp_min, vp[j]);
+          }
+          double vm_max = -1e9;
+          const auto& vm_true = stepper.VmTrue();
+          for (int j = 0; j < vm_true.Size(); ++j) {
+            vm_max = std::max(vm_max, vm_true[j]);
+          }
+          std::cout << "[t=" << stepper.TimeMs() << "ms] Vp_range=["
+                    << vp_min << "," << vp_max << "] Vm_max=" << vm_max
+                    << std::endl;
         }
         if (checkpoint_enabled && stepper.StepCount() % cfg.checkpoint_stride == 0) {
           auto io_t0 = Clock::now();

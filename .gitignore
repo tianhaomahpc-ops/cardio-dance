@@ -19,3 +19,9 @@ docs/*.aux
 docs/*.log
 docs/*.out
 docs/*.toc
+
+# Generated benchmark mesh artifacts (regenerable via tools/)
+benchmarks/half_ellipsoid/
+
+# Simulation outputs (regenerable)
+output/
