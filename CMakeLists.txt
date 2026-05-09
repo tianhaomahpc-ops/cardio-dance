@@ -62,6 +62,9 @@ target_link_libraries(generate_conforming_wholebody_case PRIVATE monodomain_core
 add_executable(generate_mesh_attr_gf tools/generate_mesh_attr_gf.cpp)
 target_link_libraries(generate_mesh_attr_gf PRIVATE monodomain_core)
 
+add_executable(debug_stewart_currents tools/debug_stewart_currents.cpp)
+target_link_libraries(debug_stewart_currents PRIVATE monodomain_core)
+
 add_executable(test_tt06_single_cell tests/test_tt06_single_cell.cpp)
 target_link_libraries(test_tt06_single_cell PRIVATE monodomain_core)
 add_test(NAME tt06_single_cell COMMAND test_tt06_single_cell)

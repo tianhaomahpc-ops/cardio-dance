@@ -304,9 +304,15 @@ double NodeCurrents(double V, const double* s, double* dstate) {
   const double b_xs = 1.0 / (1.0 + SafeExp((V - 35.0) / 15.0));
   const double tau_xs = a_xs * b_xs + 80.0;
 
-  // r, s -- Stewart Purkinje variant
-  const double r_inf = 1.0 / (1.0 + SafeExp((20.0 - V) / 13.0));
-  const double tau_r = 10.45 * SafeExp(-std::pow((V + 40.0) / 25.0, 2.0)) + 7.3;
+  // r, s gating for I_to. Stewart 2009 Purkinje uses a *fast* tau_r
+  // (sub-millisecond near upstroke voltages) so I_to clamps the AP peak
+  // before I_Na's j gate fully inactivates. The previous formula used
+  // TT06 epicardial kinetics (tau_r ~ 7 ms at V=+50), which let the cell
+  // overshoot E_Na and peak around +80 mV (debug_stewart_currents trace
+  // 2026-05). r_inf shifted to (V - 19.3)/15 mV per Stewart paper.
+  const double r_inf = 1.0 / (1.0 + SafeExp(-(V - 19.3) / 15.0));
+  const double tau_r = 9.5 * SafeExp(-std::pow((V + 40.0) / 1800.0, 1.0) *
+                                      (V + 40.0)) + 0.8;
   const double s_inf = 1.0 / (1.0 + SafeExp((V + 27.0) / 13.0));
   const double tau_s = 85.0 * SafeExp(-std::pow((V + 25.0) / 32.0, 2.0)) +
                        5.0 / (1.0 + SafeExp((V - 40.0) / 5.0)) + 42.0;

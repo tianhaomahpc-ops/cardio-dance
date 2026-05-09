@@ -159,27 +159,82 @@ Per substep:
 ### 5.4 Known status (2026-05)
 
 The current `StewartPurkinjeModel` is a **hand-port from the paper**, not
-a CellML codegen output. After fixing the I_CaL exponent bug it produces:
+a CellML codegen output.
+
+#### Current AP characteristics (after 2026-05 debugging round)
 
 | Quantity   | Paper Fig. 2 | Current code |
 |------------|--------------|--------------|
-| V_rest     | -91 mV       | -85.6 mV ✓ (loose) |
-| V_peak     | +30 mV       | **+119 mV ✗** |
-| APD90      | 340 ms       | 272 ms ✓ (loose) |
-| Repol      | yes          | yes ✓        |
+| V_rest     | -91 mV       | -77.6 mV (loose, drifts up by ~12 mV) |
+| V_peak     | +30 mV       | **+80 mV** (improved from +119 mV pre-debug) |
+| APD90      | 340 ms       | 283 ms |
+| Repol min  | -91 mV       | -80.6 mV |
+| Returns to rest | yes     | yes ✓ |
 
-The peak overshoot is the main outstanding defect. Suspected residual
-issues:
-1. Stim integration in the test (applied as external V perturbation rather
-   than as -dt*I_stim term in the dV balance) — masks model behavior.
-2. Possible sign or scaling bug in $I_f^{Na}$ / $I_f^K$ contribution during
-   upstroke.
-3. Concentration scale factor `Cm_pF * 1e-6 / (V_c * F)` may be off by a
-   factor of 10–100, leading to fast Nai/Ki drift that distorts reversal
-   potentials.
+#### Bug hunt log (2026-05)
+
+Used `tools/debug_stewart_currents` to dump V and every individual current
+at 0.05 ms granularity. Findings:
+
+1. **I_CaL exponent (FIXED).** GHK denominator was using `exp(2VF/RT)`
+   while the prefactor used `(V-15)`. Standardized to use the shifted
+   voltage `Vshift = V - 15` consistently. Brought APD90 from 20 ms to
+   272 ms but did not affect peak.
+
+2. **`tau_r` for I_to (UPDATED).** Original code used the TT06 epicardial
+   formula `tau_r = 10.45·exp(-((V+40)/25)²) + 7.3` ms which gives ~7 ms
+   at upstroke voltages. Replaced with the Stewart Purkinje fast formula
+   `tau_r = 9.5·exp(-(V+40)²/1800) + 0.8` ms which gives ~0.9 ms at V=+50,
+   plus shifted `r_inf` to `1/(1+exp(-(V-19.3)/15))`. Effect: peak dropped
+   ~1 mV — much smaller improvement than expected because r still has to
+   ramp from rest (≈0) within the first 0.2 ms after upstroke, and even
+   `r ≈ 0.3` only delivers ~3.5 µA/µF outward at peak.
+
+3. **`g_to` magnitude experiment.** Bumped `g_to` from 0.08184 to 0.4
+   (5× the Stewart paper value) as a diagnostic. Peak only fell from
+   +80 to +76 mV. Conclusion: I_to magnitude is *not* the dominant gap.
+
+#### Outstanding suspects
+
+The peak +80 mV (vs paper +30 mV) is **not explained by I_to alone**.
+Likely candidates we cannot resolve without paper / CellML reference:
+
+- **Test stimulus protocol.** The test injects `-52 µA/µF` for 1 ms which
+  pushes V from −90 to ~−38 by stim alone before I_Na fires. Published
+  CellML Stewart simulations with the same protocol show peak ~+25 mV, so
+  the protocol is correct — issue is downstream.
+- **I_Na magnitude or inactivation kinetics.** `g_Na = 130.5744 mS/µF` is
+  the published value. But our trace shows I_Na peaking at −1033 µA/µF
+  during upstroke; published Purkinje simulations sit at −600 to −800.
+  Suggests the m³·h·j product peaks higher in our code than in reference,
+  perhaps due to `tau_h`/`tau_j` formulae that ship with TT06 but are
+  refined in Stewart.
+- **Spike-and-dome morphology.** Stewart Purkinje AP is *spike-and-dome*:
+  rapid spike to ~+30, dip to ~0 mV ("phase 1 notch"), then plateau. Our
+  AP is a single plateau without the notch. The notch is created by
+  *fast I_to inactivation followed by I_CaL re-energizing the plateau* —
+  hard to get right without exact tau_s and the secondary I_to fast
+  component.
+- **Concentration scaling.** `Cm_pF = 0.185` (CellML stores Cm in nF, so
+  this is 0.185 nF, not 0.185 pF). Paired with `* 1e-6` in `dCai/dt`, the
+  net factor `Cm_pF * 1e-6 / (V_c * F) = 1.17e-10` scales pA/pF currents
+  to mM/ms. If the true conversion needed is 1.17e-7 (3 orders larger)
+  the concentrations evolve too slowly — but in single AP this would not
+  show up dramatically.
+
+#### What we tried but cannot do here
+
+External CellML reference download attempts failed: physiomeproject.org
+returns 403 from this network, github raw URLs for known mirrors
+(Chaste, openCARP, finsberg/cardiac-models) all 404, and the github
+search API is rate-limited unauthenticated. Without the official Stewart
+2009 CellML XML, we cannot diff our hand-port against the source-of-truth
+to localize the remaining discrepancy.
 
 The single-cell test asserts strict physiological ranges and is marked
-`WILL_FAIL` in CMake until the model matches reference.
+`WILL_FAIL` in CMake until the model matches reference. `tools/debug_
+stewart_currents` is checked in to make any future debugging round
+reproducible.
 
 ### 5.5 Importing CellML reference code
 
