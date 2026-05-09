@@ -141,7 +141,7 @@ def main():
             cmap=args.cmap,
             clim=(args.vmin, args.vmax),
             show_edges=args.show_wireframe,
-            edge_color="0.4",
+            edge_color="gray",
             line_width=0.3,
             scalar_bar_args={
                 "title": f"{args.field} (mV)",
