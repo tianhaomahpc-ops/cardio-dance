@@ -179,6 +179,7 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "stim_region") cfg.stim_regions.push_back(ParseStimRegion(val, line_no));
     else if (key == "use_petsc") cfg.use_petsc = ParseBool(val);
     else if (key == "use_hypre_boomeramg") cfg.use_hypre_boomeramg = ParseBool(val);
+    else if (key == "use_hypre_block_jacobi") cfg.use_hypre_block_jacobi = ParseBool(val);
     else if (key == "wholebody_solve_every_step") cfg.wholebody_solve_every_step = ParseBool(val);
     else if (key == "ksp_max_it") cfg.ksp_max_it = std::stoi(val);
     else if (key == "ksp_rtol") cfg.ksp_rtol = std::stod(val);
@@ -246,6 +247,10 @@ SimulationConfig LoadConfigFile(const std::string& path) {
 
   if (cfg.dt_ode_ms <= 0.0 || cfg.dt_pde_ms <= 0.0) {
     throw std::runtime_error("dt_ode_ms and dt_pde_ms must be > 0");
+  }
+  if (cfg.use_hypre_boomeramg && cfg.use_hypre_block_jacobi) {
+    throw std::runtime_error(
+        "use_hypre_boomeramg and use_hypre_block_jacobi are mutually exclusive");
   }
   if (cfg.dt_ode_ms > cfg.dt_pde_ms) {
     throw std::runtime_error("dt_ode_ms must be <= dt_pde_ms");

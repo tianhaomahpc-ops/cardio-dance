@@ -81,6 +81,10 @@ struct SimulationConfig {
 
   bool use_petsc = false;
   bool use_hypre_boomeramg = false;
+  // CG preconditioner: Hypre's l1-Jacobi smoother applied as a fixed-pattern
+  // block-Jacobi PC. Cheap per-iteration (one local block solve) but fewer
+  // iterations than plain CG. Mutually exclusive with use_hypre_boomeramg.
+  bool use_hypre_block_jacobi = false;
   bool wholebody_solve_every_step = false;
   int ksp_max_it = 500;
   double ksp_rtol = 1e-8;
