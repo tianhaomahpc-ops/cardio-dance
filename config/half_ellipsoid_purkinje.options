@@ -1,18 +1,16 @@
-# Half-scale half-ellipsoid (linear x1/2 of original; volume x1/8) hollow LV
-# + Purkinje + 1-lead pseudo-ECG. Mesh at h=1 mm. Block-Jacobi-preconditioned CG.
+# Full-scale half-ellipsoid LV + 91-terminal Purkinje + 1-lead pseudo-ECG.
+# h=1.0 mm, single MPI rank, plain CG (h=1mm at 21k nodes / 124k tets is
+# the sweet spot for this 4 vCPU sandbox: too small to benefit from MPI
+# parallelism but big enough to resolve propagation).
 #
 # Regenerate mesh:
 #   gmsh -3 tools/half_ellipsoid.geo -o benchmarks/half_ellipsoid/heart.msh \
-#     -setnumber a_out 17.5 -setnumber b_out 11 -setnumber c_out 11 \
-#     -setnumber a_in  14   -setnumber b_in  7.5 -setnumber c_in  7.5 \
-#     -setnumber h_mm 1.0
-#   ./build/finalize_half_ellipsoid_mesh \
-#     --a-out 17.5 --b-out 11 --c-out 11 \
-#     --a-in 14 --b-in 7.5 --c-in 7.5 --emit-fibers
+#        -setnumber h_mm 1.0
+#   ./build/finalize_half_ellipsoid_mesh --emit-fibers
 # Regenerate Purkinje:
 #   python3 tools/generate_purkinje_tree.py \
-#     --root=16,0,0 --direction=-1,0,0 --length 1.5 --max_depth 8 \
-#     --p_bifurcate 0.85 --bbox_min=-1,-7,-7 --bbox_max=16.5,7,7 \
+#     --root=33,0,0 --direction=-1,0,0 --length 2.5 --max_depth 9 \
+#     --p_bifurcate 0.85 --bbox_min=-2,-14,-14 --bbox_max=33,14,14 \
 #     --seed 17 --out config/half_ellipsoid_purkinje.network
 
 mesh_path=benchmarks/half_ellipsoid/heart.mesh
@@ -45,7 +43,7 @@ stim_zmin_mm=0.0
 stim_zmax_mm=-1.0
 stim_fraction=0.0
 
-# Purkinje network: 91 nodes, 43 terminals, half-scale cavity bbox.
+# Purkinje: 192 nodes, 91 terminals, full-scale cavity bbox.
 enable_purkinje=1
 purkinje_network_path=config/half_ellipsoid_purkinje.network
 purkinje_cable_subdivision=1
@@ -59,26 +57,24 @@ purkinje_stim_start_ms=0.0
 purkinje_stim_end_ms=1.0
 purkinje_stim_amp_uA_per_uF=-150.0
 
-# PVJ coupling. pvj_max_dist_mm=3 since heart shrunk by 1/2.
+# PVJ smear
 pvj_g_mS=5.0
-pvj_max_dist_mm=3.0
+pvj_max_dist_mm=5.0
 pvj_current_scale=4.0
 pvj_delay_ms=0.0
-# Smear scaled with geometry: 2 mm ball (was 4 mm at full scale).
-pvj_smear_radius_mm=2.0
+pvj_smear_radius_mm=4.0
 
-# 1-lead pseudo-ECG. Probe at +y=40 mm from heart center -- closer than
-# original since the heart is smaller.
+# 1-lead pseudo-ECG. Probe at +y=80 mm from heart center (full scale).
 enable_pseudo_ecg=1
-pseudo_ecg_probe=lead_lateral,8.75,40,0
+pseudo_ecg_probe=lead_lateral,17.5,80,0
 pseudo_ecg_sigma_i_mS_per_mm=0.174
 pseudo_ecg_sigma_b_mS_per_mm=0.2
 pseudo_ecg_stride=10
 
-# Solver: MFEM CG + Hypre l1-Jacobi block-Jacobi preconditioner.
+# Solver
 use_petsc=0
 use_hypre_boomeramg=0
-use_hypre_block_jacobi=1
+use_hypre_block_jacobi=0
 ksp_max_it=500
 ksp_rtol=1e-8
 
