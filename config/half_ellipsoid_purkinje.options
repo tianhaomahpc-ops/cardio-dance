@@ -71,8 +71,8 @@ use_petsc=0
 ksp_max_it=500
 ksp_rtol=1e-8
 
-# Output
-output_stride=200
+# Output -- dense for movie rendering: 1 frame per 1 ms.
+output_stride=20
 checkpoint_stride=0
 output_dir=output/half_ellipsoid_purkinje
 checkpoint_dir=checkpoint/half_ellipsoid_purkinje
