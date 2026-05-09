@@ -77,7 +77,7 @@ Rules of thumb:
 |---|---|---|---|
 | `IIonicModel` (abstract) | `IIonicModel.hpp` | `Compute/AdvanceStates`, `Save/LoadState`, `ModelId()`, `NumNodes()` | — (interface) |
 | `TT06Model` | `TT06Model.{hpp,cpp}` + `tt06_generated.{h,c}` | CellML codegen path | `test_tt06_single_cell`, `test_restart_resume` |
-| `StewartPurkinjeModel` | `StewartPurkinjeModel.{hpp,cpp}` | Hand-port (KNOWN BROKEN, see `purkinje_numerics.md` §5.4) | `test_stewart_single_cell` (WILL_FAIL) |
+| `StewartPurkinjeModel` | `StewartPurkinjeModel.{hpp,cpp}` + `stewart_generated.{h,c}` | CellML codegen-backed (Stewart 2009); thin wrapper over `stewart_initConsts/computeRates/computeVariables` | `test_stewart_single_cell` |
 | `Grandi2011Model` | `Grandi2011Model.{hpp,cpp}` | Compact 15-state atrial port | — (TODO) |
 | `PassiveModel` | `PassiveModel.{hpp,cpp}` | Leak-only: `SetLeakConductance`, `LeakConductance`, `RestPotential` | `test_pvj_active_sign`, `test_regional_isolation` |
 | `RegionalIonicModel` | `RegionalIonicModel.{hpp,cpp}` | `LocalDofCount(Region)`, `DofRegions()`; gather/scatter on V_m | `test_regional_isolation` |
@@ -86,10 +86,10 @@ Rules of thumb:
 
 | Class | File | Public methods (key) | Test |
 |---|---|---|---|
-| `LinearSystemSolver` | `LinearSolverFactory.{hpp,cpp}` | `SetOperator`, `Solve`, `LastNumIterations` | — (used by every stepper) |
+| `LinearSystemSolver` | `LinearSolverFactory.{hpp,cpp}` | `SetOperator`, `Solve`, `LastNumIterations`. Backend chosen by config: PETSc KSP (default; CG+ASM(0,ICC0)), MFEM CG + Hypre BoomerAMG, MFEM CG + Hypre l1-Jacobi, or plain MFEM CG | — (used by every stepper) |
 | `MonodomainStepper` | `MonodomainStepper.{hpp,cpp}` | `Bootstrap`, `StepNoCorrection`, `SetPvjCoupler`, `VmTrue`, `LastTiming` | `test_restart_resume`, `test_wholebody_smoke` |
 | `PurkinjeCableSolver` | `PurkinjeCableSolver.{hpp,cpp}` | `LoadNetwork`, `Initialize`, `Advance`, `TerminalVoltage`, `GraphNodeVoltage`, `Num*` | `test_purkinje_cable_smoke`, `test_purkinje_cable_cv` (WILL_FAIL) |
-| `PvjCoupler` | `PvjCoupler.{hpp,cpp}` | `BuildHeartCouplingCurrent`, `AdvancePurkinje`, `Cable`, `GlobalNumMappedPvj`, `GlobalMaxMappedDistMm` | `test_pvj_active_sign` |
+| `PvjCoupler` | `PvjCoupler.{hpp,cpp}` | `BuildHeartCouplingCurrent`, `AdvancePurkinje`, `Cable`, `GlobalNumMappedPvj`, `GlobalMaxMappedDistMm`. Optional smearing via `pvj_smear_radius_mm` distributes per-terminal current over a ball of DOFs to avoid 3D source-sink mismatch | `test_pvj_active_sign` |
 | `ExtracellularRecoverySolver` | `ExtracellularRecoverySolver.{hpp,cpp}` | `Solve(vm_true)`, `UeTrue`, `Ue`, `LastNumIterations` | `test_wholebody_smoke` |
 | `TorsoPotentialSolver` | `TorsoPotentialSolver.{hpp,cpp}` | `SetConstrainedDofs`, `Solve(bc_true)`, `NumConstrainedDofs` | `test_wholebody_smoke` |
 
@@ -105,6 +105,7 @@ Rules of thumb:
 |---|---|---|---|
 | `CheckpointIO` | `CheckpointIO.{hpp,cpp}` | `SaveLatest(step,t,vm,ionic)`, `LoadLatest` (V3+model_id) | `test_checkpoint_model_id`, `test_restart_resume` |
 | `OutputManager` | `OutputManager.{hpp,cpp}` | `Save(step,t,…)` ParaView writer | — (visual) |
+| `PseudoEcg` | `PseudoEcg.{hpp,cpp}` | `Sample(t, vm_gf)` — element-centroid quadrature of $(\sigma_i/4\pi\sigma_b)\int \nabla V_m \cdot \hat r/r^2$ for far-field probes; one CSV column per probe | — (used in main loop, visual via `plot_pseudo_ecg.py`) |
 
 ### `src/main.cpp`
 
@@ -128,16 +129,30 @@ Orchestrator. No test directly; covered end-to-end by running `./monodomain
 
 ## Tools
 
+### Mesh / fiber generators
+
 | Binary | File | Role |
 |---|---|---|
-| `generate_niederer_case` | `tools/generate_niederer_case.cpp` | Builds Niederer benchmark mesh + fibers (BROKEN on MFEM 4.5: uses protected `GetElementJacobian`) |
+| `generate_niederer_case` | `tools/generate_niederer_case.cpp` | Niederer benchmark mesh + fibers (BROKEN on MFEM 4.5: uses protected `GetElementJacobian`) |
 | `generate_torso_box` | `tools/generate_torso_box.cpp` | Auto-generated torso bounding box |
 | `generate_conforming_wholebody_case` | `tools/generate_conforming_wholebody_case.cpp` | Wholebody mesh w/ heart + torso attributes |
 | `generate_mesh_attr_gf` | `tools/generate_mesh_attr_gf.cpp` | Per-element attribute → grid-function field |
-| `generate_purkinje_tree.py` | `tools/generate_purkinje_tree.py` | Costabal-style fractal Purkinje tree generator |
-| `generate_conforming_wholebody_gmsh.py` | same `.py` | Optional Gmsh-based wholebody mesh |
-| `run_niederer_all_scales.sh` | same `.sh` | Niederer benchmark sweep across mesh resolutions |
-| `run_wholebody_gmsh_matrix.sh` | same `.sh` | Wholebody scenario matrix |
+| `generate_half_ellipsoid_case` | `tools/generate_half_ellipsoid_case.cpp` | (Legacy) cartesian-carve half-ellipsoid mesh — superseded by gmsh path below |
+| `tools/half_ellipsoid.geo` | `.geo` | gmsh OpenCASCADE CSG: outer ellipsoid - inner cavity ∩ x≥0 half-space; emits tet `.msh` |
+| `finalize_half_ellipsoid_mesh` | `tools/finalize_half_ellipsoid_mesh.cpp` | Loads gmsh `.msh`, reclassifies boundary triangles into epi/endo/base by true centroid distance, emits MFEM `.mesh` + optional constant fiber `.gf` |
+
+### Purkinje + post-processing
+
+| Binary | File | Role |
+|---|---|---|
+| `generate_purkinje_tree.py` | `tools/generate_purkinje_tree.py` | Costabal-style fractal Purkinje tree generator (.network output) |
+| `generate_conforming_wholebody_gmsh.py` | same | Optional Gmsh-based wholebody mesh |
+| `run_niederer_all_scales.sh` | same | Niederer benchmark sweep across mesh resolutions |
+| `run_wholebody_gmsh_matrix.sh` | same | Wholebody scenario matrix |
+| `debug_stewart_currents` | `tools/debug_stewart_currents.cpp` | Single-cell Stewart V/I trace dump for diagnostics |
+| `plot_pseudo_ecg.py` | `tools/plot_pseudo_ecg.py` | matplotlib ECG plotter, one panel per probe |
+| `plot_vm_movie.py` | `tools/plot_vm_movie.py` | pyvista + ffmpeg movie of V_m, optional Purkinje overlay + clip view |
+| `plot_vm_gallery.py` | `tools/plot_vm_gallery.py` | Renders mesh-wireframe + multi-angle cross-section PNGs |
 
 ---
 
@@ -150,9 +165,9 @@ Orchestrator. No test directly; covered end-to-end by running `./monodomain
 | `fiber_gf_load` | `test_fiber_gf_load.cpp` | Fiber field load + orthogonality | pass |
 | `restart_resume` | `test_restart_resume.cpp` | Checkpoint round-trip identity | fail (mesh missing in repo) |
 | `wholebody_smoke` | `test_wholebody_smoke.cpp` | One step of wholebody coupled solve | fail (mesh missing) |
-| `stewart_single_cell` | `test_stewart_single_cell.cpp` | Stewart AP fits Stewart 2009 Fig. 2 | WILL_FAIL until CellML port lands |
+| `stewart_single_cell` | `test_stewart_single_cell.cpp` | Stewart codegen AP morphology | pass |
 | `purkinje_cable_smoke` | `test_purkinje_cable_smoke.cpp` | Diffusion through 30-node passive cable | pass |
-| `purkinje_cable_cv` | `test_purkinje_cable_cv.cpp` | Stewart cable CV in [1.5, 4.0] m/s | WILL_FAIL (depends on Stewart) |
+| `purkinje_cable_cv` | `test_purkinje_cable_cv.cpp` | Stewart cable CV in [1.5, 6.5] m/s | pass |
 | `pvj_active_sign` | `test_pvj_active_sign.cpp` | $I_{pvj}=g(V_m-V_p)$ sign + magnitude | pass |
 | `regional_isolation` | `test_regional_isolation.cpp` | Children only run on their region's DOFs | pass |
 | `checkpoint_model_id` | `test_checkpoint_model_id.cpp` | Loading TT06 ckpt into Passive refused | pass |

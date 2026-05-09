@@ -306,6 +306,33 @@ When `pvj_delay_ms > 0`:
 
 Buffer trim keeps history within $4\times$ delay for safety.
 
+### 8.5 Smeared injection (3D source-sink mismatch fix)
+
+Under default single-DOF injection, the heart-side current is added to one
+true DOF nearest the terminal. On 3D unstructured tet meshes with cell
+size $h$ comparable to or larger than the cardiac space constant
+$\lambda = \sqrt{D \tau_\mathrm{AP}} \approx 0.3$ mm, this point source is
+drained by 8-12 surrounding resting DOFs *before* I_Na can establish
+locally — the activated patch is too small to self-sustain. Symptom:
+$V_m$ briefly peaks near the injection then collapses back without
+propagation.
+
+`pvj_smear_radius_mm > 0` distributes the per-terminal current over a
+ball of radius $R$ around the anchor DOF:
+
+$$I_{pvj}^{(i)} = w_i\, g_{pvj}\, s_{pvj}\, (V_m^{(i)} - V_p)
+\quad\text{for all } i \in \mathcal{B}_R(\mathrm{anchor})$$
+
+with $w_i = 1 / |\mathcal{B}_R|$ uniform; the per-terminal total
+injection magnitude is unchanged. Anchor DOF is still used (single owner
+rank) for $V_m$ feedback to the cable, so the MPI_Allreduce SUM in
+`AdvancePurkinje` still recovers exactly one owner-side value per
+terminal even though the smeared list contains multiple links.
+
+Tested on the half-ellipsoid demo: with `pvj_smear_radius_mm=0` the wave
+collapses, with `pvj_smear_radius_mm=4` (full-scale) or `=2` (half-scale)
+it propagates outward through the wall.
+
 ---
 
 ## 9. Regional ionic dispatcher
@@ -425,3 +452,148 @@ Mapping: <how the verification stays sound>
 If a verification test no longer passes after a change, mark it `WILL_FAIL`
 in the same commit and add a TODO line; do not silently relax the
 assertion.
+
+---
+
+## 13. Fiber field (current limitation)
+
+The fiber tensor coefficient $\boldsymbol\sigma = \sigma_f\, \mathbf{f}\!\otimes\!\mathbf{f}
++ \sigma_s\, \mathbf{s}\!\otimes\!\mathbf{s} + \sigma_n\, \mathbf{n}\!\otimes\!\mathbf{n}$
+is fully wired (`Assembler::InitializeFiberCoefficients` reads three
+`.gf` files when `use_fiber_gf=1`). Conduction velocity along fiber vs
+transverse scales as $\sqrt{\sigma_f / \sigma_t} = \sqrt{0.1334/0.0176}
+\approx 2.75\times$ for the project default values.
+
+**However** the `.gf` files we currently emit (via
+`tools/finalize_half_ellipsoid_mesh.cpp --emit-fibers`) are **constant
+vectors** $\mathbf{f}=(1,0,0)$, $\mathbf{s}=(0,1,0)$, $\mathbf{n}=(0,0,1)$
+at every DOF. The conductivity tensor is therefore fixed Cartesian
+diagonal $\mathrm{diag}(\sigma_f, \sigma_s, \sigma_n)$ — anisotropic
+along $\hat{x}$ but **not** following the natural Streeter helix of real
+left ventricles ($-60°$ at endo rotating to $+60°$ at epi).
+
+What this is sufficient for:
+- PVJ sign / magnitude verification
+- PetsC ASM iteration-count benchmark
+- Pipeline correctness demo (mesh + Purkinje + ECG)
+- Order-of-magnitude QRS duration
+
+What this is **not** sufficient for:
+- Realistic T-wave morphology (lacks transmural repolarization gradient
+  driven by helical fibers)
+- Multi-lead ECG differences
+- Bundle-branch-block clinical case studies
+
+**Adding rule-based fiber generation (TODO)**: implement Bayer-Blake-
+Trayanova 2012 LDRBM via four Laplace-Dirichlet solves
+($\phi_\mathrm{epi}, \phi_\mathrm{endo}, \phi_\mathrm{base},
+\phi_\mathrm{long}$), construct local transmural / longitudinal /
+circumferential coordinate frames from $\nabla\phi$, then rotate the
+sheet vector by the Streeter helix angle $\alpha(d/W) = \alpha_\mathrm{endo}
++ (d/W)\, (\alpha_\mathrm{epi} - \alpha_\mathrm{endo})$ across wall
+fraction $d/W$. ~200 lines. Not implemented.
+
+---
+
+## 14. Half-ellipsoid LV demo
+
+A worked end-to-end pipeline lives in
+`config/half_ellipsoid_purkinje.options` and produces the figures /
+movies / pseudo-ECG under `output/half_ellipsoid_purkinje/`.
+
+### 14.1 Geometry
+
+Half-ellipsoid hollow LV (open at base $x=0$):
+- Outer ellipsoid: $a=35, b=22, c=22$ mm
+- Inner cavity:    $a_\mathrm{in}=28, b_\mathrm{in}=15, c_\mathrm{in}=15$ mm
+- Wall thickness ranges $\sim 7$ mm equator, tapering at apex.
+
+Mesh by `tools/half_ellipsoid.geo` (gmsh OpenCASCADE CSG → Frontal-
+Delaunay 2D + Delaunay 3D). At $h=1.0$ mm: 21,707 nodes / 124,715 tets.
+`tools/finalize_half_ellipsoid_mesh.cpp` reclassifies boundary triangles
+into epi / endo / base by true face-centroid distance.
+
+A previous Cartesian-carve mesh tool (`generate_half_ellipsoid_case`)
+exists for reference but produces stair-stepped boundaries; superseded.
+
+### 14.2 Purkinje network
+
+`tools/generate_purkinje_tree.py` (Costabal-style fractal): from a root
+near the apex along $-\hat{x}$, with 30° bifurcation angles, depth 9,
+bifurcation probability 0.85. Default at full scale: 192 graph nodes /
+91 terminals. The bbox argument confines growth to within the cavity.
+
+### 14.3 PVJ + smear
+
+Activation comes from Purkinje only (no direct myocardial stim). Cluster
+pace at root nodes 0/1/2 (-150 µA/µF for 1 ms) drives the cable; PVJ
+maps each terminal to the nearest endocardial DOF (44/91 typically map
+within `pvj_max_dist_mm=5`). Heart-side injection is smeared over a 4 mm
+ball (full scale) or 2 mm (half scale) to clear the source-sink hurdle.
+
+### 14.4 Pseudo-ECG probe
+
+`PseudoEcg` evaluates $\phi(\vec x_p, t) = \frac{\sigma_i}{4\pi\sigma_b}
+\sum_e V_e\, \nabla V_m^{(e)} \cdot (\vec x_p - \vec c_e) /
+|\vec x_p - \vec c_e|^3$ at element centroids, MPI_Allreduce SUM, write
+one CSV column per probe. Default config places one lead at $(17.5, 80,
+0)$ mm.
+
+### 14.5 Run results (single rank, plain CG; full scale h=1mm)
+
+| Quantity at $t=100$ ms | Value |
+|---|---|
+| Wall (100 ms simulated)     | 5m52s |
+| KSP iter / step (plain CG) | 50 ± 6 |
+| KSP iter / step (PETSc ASM)| 5 ± 1 |
+| $V_m$ min / max / mean      | -93.7 / +31.3 / -66.6 mV |
+| Purkinje terminals mapped   | 44 / 91 |
+
+Visualisation artifacts (committed to git for inspection):
+- `output/half_ellipsoid_purkinje/vm_movie.mp4`
+- `output/half_ellipsoid_purkinje/vm_movie_clipped.mp4`
+- `output/half_ellipsoid_purkinje/pseudo_ecg.png`
+- `output/half_ellipsoid_purkinje/gallery/*.png` (mesh wireframe + cross-sections)
+
+---
+
+## 15. Linear solver (Crank-Nicolson diffusion step)
+
+The CN system $A V^{n+1} = \mathrm{RHS}$ with
+$A = \chi C_m / \Delta t \cdot M + \tfrac{1}{2} K$ is symmetric positive-
+definite (M and K both SPD; positive linear combination preserves SPD).
+
+Available backends in `LinearSolverFactory`, controlled by
+`SimulationConfig`:
+
+| Setting | Backend | Use when |
+|---|---|---|
+| `use_petsc=1` (default) | PETSc KSP, options from env `PETSC_OPTIONS` | Production runs (project default) |
+| `use_hypre_boomeramg=1` | MFEM CG + HypreBoomerAMG | Large meshes, MPI ≥ 16 |
+| `use_hypre_block_jacobi=1` | MFEM CG + HypreSmoother (l1-Jacobi) | Cheap PC, comparable to plain CG |
+| (none of the above)     | MFEM CG without preconditioner | Diagnostic / small problems |
+
+Project-default `config/petsc_asm.opts`:
+
+```
+-mono_ksp_type cg
+-mono_ksp_max_it 500
+-mono_ksp_rtol 1e-8
+-mono_ksp_norm_type unpreconditioned
+-mono_pc_type asm
+-mono_pc_asm_overlap 0
+-mono_sub_pc_type icc
+-mono_sub_pc_factor_levels 0
+```
+
+ICC(0) (Incomplete Cholesky, zero fill) exploits SPD structure; overlap
+0 is the cheapest Schwarz variant. On the half-ellipsoid 124k-tet
+problem this gives mean **5 KSP iter/step** vs **50 iter/step** for
+plain CG (10× reduction); see `docs/petsc_asm_vs_cg_iter_bench.md`.
+
+Activation:
+
+```bash
+export PETSC_OPTIONS="$(grep -v '^##\|^$' config/petsc_asm.opts | tr '\n' ' ')"
+./build/monodomain --config config/half_ellipsoid_purkinje.options
+```

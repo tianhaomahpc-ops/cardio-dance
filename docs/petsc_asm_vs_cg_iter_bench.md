@@ -9,8 +9,16 @@ configuration in both runs.
 
 MFEM 4.7 rebuilt from source with `MFEM_USE_PETSC=YES`, linked against
 PETSc 3.19.6. cardio-dance reconfigured with `MFEM_DIR=/opt/mfem-petsc-install`.
-PETSc options file: `config/petsc_asm.opts` (CG + ASM with 1-element
-overlap and ILU(0) on each local subdomain).
+PETSc options file: `config/petsc_asm.opts` defaults to **CG + ASM
+(overlap=0) with ICC(0) sub-PC**.
+
+ICC(0) is preferred over ILU(0) here because the Crank-Nicolson system
+$A = \chi C_m / \Delta t \cdot M + 0.5\,K$ is symmetric positive-definite
+(both M and K are SPD; their positive linear combination is SPD).
+Overlap=0 keeps the local sub-block compact and avoids cross-rank
+communication for the overlapping element layer; iter count was
+identical (5.0) at overlap=1 with ILU(0), so the cheaper variant is
+the default.
 
 | Parameter | Value |
 |---|---|
@@ -27,7 +35,8 @@ overlap and ILU(0) on each local subdomain).
 | Solver | Mean iter / step | Min / Max iter | Wall (20 ms sim) | V_m mean at t=20 |
 |---|---|---|---|---|
 | **Plain CG (no PC)** | 49.6 | 44 / 56 | 61.5 s | -81.24 mV |
-| **PETSc CG + ASM(ILU0)** | **5.0** | 4 / 6 | 55.7 s | -81.24 mV |
+| PETSc CG + ASM(overlap=1, ILU0) | 5.0 | 4 / 6 | 55.7 s | -81.24 mV |
+| **PETSc CG + ASM(overlap=0, ICC0) ★ default** | **5.0** | 4 / 6 | 58.7 s | -81.24 mV |
 
 **Iteration count reduced 10× (49.6 → 5.0).** Both solvers converge to
 the same V_m field (mean V_m matches to 4 significant digits at every

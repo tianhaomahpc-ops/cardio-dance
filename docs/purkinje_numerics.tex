@@ -39,6 +39,44 @@
 \makeatother
 \usepackage{xcolor}
 \usepackage[margin=2.5cm]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\newenvironment{Shaded}{}{}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.49,0.56,0.16}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\BuiltInTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{#1}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.53,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.56,0.13,0.00}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.73,0.13,0.13}{\textit{#1}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{1.00,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.25,0.63,0.44}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.02,0.16,0.49}{#1}}
+\newcommand{\ImportTok}[1]{\textcolor[rgb]{0.00,0.50,0.00}{\textbf{#1}}}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.40,0.40,0.40}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.00,0.44,0.13}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.74,0.48,0.00}{#1}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.73,0.40,0.53}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.10,0.09,0.49}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.25,0.44,0.63}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.38,0.63,0.69}{\textbf{\textit{#1}}}}
 \usepackage{longtable,booktabs,array}
 \usepackage{calc} % for calculating minipage widths
 % Correct order of tables after \paragraph or \subparagraph
@@ -554,6 +592,36 @@ the sample with timestamp \(\le t_\mathrm{mid} -  \mathrm{delay}\)
 
 Buffer trim keeps history within \(4\times\) delay for safety.
 
+\hypertarget{smeared-injection-3d-source-sink-mismatch-fix}{%
+\subsubsection{8.5 Smeared injection (3D source-sink mismatch
+fix)}\label{smeared-injection-3d-source-sink-mismatch-fix}}
+
+Under default single-DOF injection, the heart-side current is added to
+one true DOF nearest the terminal. On 3D unstructured tet meshes with
+cell size \(h\) comparable to or larger than the cardiac space constant
+\(\lambda = \sqrt{D \tau_\mathrm{AP}} \approx 0.3\) mm, this point
+source is drained by 8-12 surrounding resting DOFs \emph{before} I\_Na
+can establish locally --- the activated patch is too small to
+self-sustain. Symptom: \(V_m\) briefly peaks near the injection then
+collapses back without propagation.
+
+\texttt{pvj\_smear\_radius\_mm\ \textgreater{}\ 0} distributes the
+per-terminal current over a ball of radius \(R\) around the anchor DOF:
+
+\[I_{pvj}^{(i)} = w_i\, g_{pvj}\, s_{pvj}\, (V_m^{(i)} - V_p)
+\quad\text{for all } i \in \mathcal{B}_R(\mathrm{anchor})\]
+
+with \(w_i = 1 / |\mathcal{B}_R|\) uniform; the per-terminal total
+injection magnitude is unchanged. Anchor DOF is still used (single owner
+rank) for \(V_m\) feedback to the cable, so the MPI\_Allreduce SUM in
+\texttt{AdvancePurkinje} still recovers exactly one owner-side value per
+terminal even though the smeared list contains multiple links.
+
+Tested on the half-ellipsoid demo: with
+\texttt{pvj\_smear\_radius\_mm=0} the wave collapses, with
+\texttt{pvj\_smear\_radius\_mm=4} (full-scale) or \texttt{=2}
+(half-scale) it propagates outward through the wall.
+
 \begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
 
 \hypertarget{regional-ionic-dispatcher}{%
@@ -729,5 +797,194 @@ Mapping: <how the verification stays sound>
 If a verification test no longer passes after a change, mark it
 \texttt{WILL\_FAIL} in the same commit and add a TODO line; do not
 silently relax the assertion.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{fiber-field-current-limitation}{%
+\subsection{13. Fiber field (current
+limitation)}\label{fiber-field-current-limitation}}
+
+The fiber tensor coefficient
+\(\boldsymbol\sigma = \sigma_f\, \mathbf{f}\!\otimes\!\mathbf{f} + \sigma_s\, \mathbf{s}\!\otimes\!\mathbf{s} + \sigma_n\, \mathbf{n}\!\otimes\!\mathbf{n}\)
+is fully wired (\texttt{Assembler::InitializeFiberCoefficients} reads
+three \texttt{.gf} files when \texttt{use\_fiber\_gf=1}). Conduction
+velocity along fiber vs transverse scales as
+\(\sqrt{\sigma_f / \sigma_t} = \sqrt{0.1334/0.0176} \approx 2.75\times\)
+for the project default values.
+
+\textbf{However} the \texttt{.gf} files we currently emit (via
+\texttt{tools/finalize\_half\_ellipsoid\_mesh.cpp\ -\/-emit-fibers}) are
+\textbf{constant vectors} \(\mathbf{f}=(1,0,0)\),
+\(\mathbf{s}=(0,1,0)\), \(\mathbf{n}=(0,0,1)\) at every DOF. The
+conductivity tensor is therefore fixed Cartesian diagonal
+\(\mathrm{diag}(\sigma_f, \sigma_s, \sigma_n)\) --- anisotropic along
+\(\hat{x}\) but \textbf{not} following the natural Streeter helix of
+real left ventricles (\(-60°\) at endo rotating to \(+60°\) at epi).
+
+What this is sufficient for: - PVJ sign / magnitude verification - PetsC
+ASM iteration-count benchmark - Pipeline correctness demo (mesh +
+Purkinje + ECG) - Order-of-magnitude QRS duration
+
+What this is \textbf{not} sufficient for: - Realistic T-wave morphology
+(lacks transmural repolarization gradient driven by helical fibers) -
+Multi-lead ECG differences - Bundle-branch-block clinical case studies
+
+\textbf{Adding rule-based fiber generation (TODO)}: implement
+Bayer-Blake- Trayanova 2012 LDRBM via four Laplace-Dirichlet solves
+(\(\phi_\mathrm{epi}, \phi_\mathrm{endo}, \phi_\mathrm{base}, \phi_\mathrm{long}\)),
+construct local transmural / longitudinal / circumferential coordinate
+frames from \(\nabla\phi\), then rotate the sheet vector by the Streeter
+helix angle
+\(\alpha(d/W) = \alpha_\mathrm{endo} + (d/W)\, (\alpha_\mathrm{epi} - \alpha_\mathrm{endo})\)
+across wall fraction \(d/W\). \textasciitilde200 lines. Not implemented.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{half-ellipsoid-lv-demo}{%
+\subsection{14. Half-ellipsoid LV demo}\label{half-ellipsoid-lv-demo}}
+
+A worked end-to-end pipeline lives in
+\texttt{config/half\_ellipsoid\_purkinje.options} and produces the
+figures / movies / pseudo-ECG under
+\texttt{output/half\_ellipsoid\_purkinje/}.
+
+\hypertarget{geometry}{%
+\subsubsection{14.1 Geometry}\label{geometry}}
+
+Half-ellipsoid hollow LV (open at base \(x=0\)): - Outer ellipsoid:
+\(a=35, b=22, c=22\) mm - Inner cavity:
+\(a_\mathrm{in}=28, b_\mathrm{in}=15, c_\mathrm{in}=15\) mm - Wall
+thickness ranges \(\sim 7\) mm equator, tapering at apex.
+
+Mesh by \texttt{tools/half\_ellipsoid.geo} (gmsh OpenCASCADE CSG →
+Frontal- Delaunay 2D + Delaunay 3D). At \(h=1.0\) mm: 21,707 nodes /
+124,715 tets. \texttt{tools/finalize\_half\_ellipsoid\_mesh.cpp}
+reclassifies boundary triangles into epi / endo / base by true
+face-centroid distance.
+
+A previous Cartesian-carve mesh tool
+(\texttt{generate\_half\_ellipsoid\_case}) exists for reference but
+produces stair-stepped boundaries; superseded.
+
+\hypertarget{purkinje-network}{%
+\subsubsection{14.2 Purkinje network}\label{purkinje-network}}
+
+\texttt{tools/generate\_purkinje\_tree.py} (Costabal-style fractal):
+from a root near the apex along \(-\hat{x}\), with 30° bifurcation
+angles, depth 9, bifurcation probability 0.85. Default at full scale:
+192 graph nodes / 91 terminals. The bbox argument confines growth to
+within the cavity.
+
+\hypertarget{pvj-smear}{%
+\subsubsection{14.3 PVJ + smear}\label{pvj-smear}}
+
+Activation comes from Purkinje only (no direct myocardial stim). Cluster
+pace at root nodes 0/1/2 (-150 µA/µF for 1 ms) drives the cable; PVJ
+maps each terminal to the nearest endocardial DOF (44/91 typically map
+within \texttt{pvj\_max\_dist\_mm=5}). Heart-side injection is smeared
+over a 4 mm ball (full scale) or 2 mm (half scale) to clear the
+source-sink hurdle.
+
+\hypertarget{pseudo-ecg-probe}{%
+\subsubsection{14.4 Pseudo-ECG probe}\label{pseudo-ecg-probe}}
+
+\texttt{PseudoEcg} evaluates
+\(\phi(\vec x_p, t) = \frac{\sigma_i}{4\pi\sigma_b} \sum_e V_e\, \nabla V_m^{(e)} \cdot (\vec x_p - \vec c_e) / |\vec x_p - \vec c_e|^3\)
+at element centroids, MPI\_Allreduce SUM, write one CSV column per
+probe. Default config places one lead at \((17.5, 80, 0)\) mm.
+
+\hypertarget{run-results-single-rank-plain-cg-full-scale-h1mm}{%
+\subsubsection{14.5 Run results (single rank, plain CG; full scale
+h=1mm)}\label{run-results-single-rank-plain-cg-full-scale-h1mm}}
+
+\begin{longtable}[]{@{}ll@{}}
+\toprule\noalign{}
+Quantity at \(t=100\) ms & Value \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Wall (100 ms simulated) & 5m52s \\
+KSP iter / step (plain CG) & 50 ± 6 \\
+KSP iter / step (PETSc ASM) & 5 ± 1 \\
+\(V_m\) min / max / mean & -93.7 / +31.3 / -66.6 mV \\
+Purkinje terminals mapped & 44 / 91 \\
+\end{longtable}
+
+Visualisation artifacts (committed to git for inspection): -
+\texttt{output/half\_ellipsoid\_purkinje/vm\_movie.mp4} -
+\texttt{output/half\_ellipsoid\_purkinje/vm\_movie\_clipped.mp4} -
+\texttt{output/half\_ellipsoid\_purkinje/pseudo\_ecg.png} -
+\texttt{output/half\_ellipsoid\_purkinje/gallery/*.png} (mesh wireframe
++ cross-sections)
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{linear-solver-crank-nicolson-diffusion-step}{%
+\subsection{15. Linear solver (Crank-Nicolson diffusion
+step)}\label{linear-solver-crank-nicolson-diffusion-step}}
+
+The CN system \(A V^{n+1} = \mathrm{RHS}\) with
+\(A = \chi C_m / \Delta t \cdot M + \tfrac{1}{2} K\) is symmetric
+positive- definite (M and K both SPD; positive linear combination
+preserves SPD).
+
+Available backends in \texttt{LinearSolverFactory}, controlled by
+\texttt{SimulationConfig}:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Setting
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Backend
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Use when
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{use\_petsc=1} (default) & PETSc KSP, options from env
+\texttt{PETSC\_OPTIONS} & Production runs (project default) \\
+\texttt{use\_hypre\_boomeramg=1} & MFEM CG + HypreBoomerAMG & Large
+meshes, MPI ≥ 16 \\
+\texttt{use\_hypre\_block\_jacobi=1} & MFEM CG + HypreSmoother
+(l1-Jacobi) & Cheap PC, comparable to plain CG \\
+(none of the above) & MFEM CG without preconditioner & Diagnostic /
+small problems \\
+\end{longtable}
+
+Project-default \texttt{config/petsc\_asm.opts}:
+
+\begin{verbatim}
+-mono_ksp_type cg
+-mono_ksp_max_it 500
+-mono_ksp_rtol 1e-8
+-mono_ksp_norm_type unpreconditioned
+-mono_pc_type asm
+-mono_pc_asm_overlap 0
+-mono_sub_pc_type icc
+-mono_sub_pc_factor_levels 0
+\end{verbatim}
+
+ICC(0) (Incomplete Cholesky, zero fill) exploits SPD structure; overlap
+0 is the cheapest Schwarz variant. On the half-ellipsoid 124k-tet
+problem this gives mean \textbf{5 KSP iter/step} vs \textbf{50
+iter/step} for plain CG (10× reduction); see
+\texttt{docs/petsc\_asm\_vs\_cg\_iter\_bench.md}.
+
+Activation:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\BuiltInTok{export} \VariableTok{PETSC\_OPTIONS}\OperatorTok{=}\StringTok{"}\VariableTok{$(}\FunctionTok{grep} \AttributeTok{{-}v} \StringTok{\textquotesingle{}\^{}\#\#\textbackslash{}|\^{}$\textquotesingle{}}\NormalTok{ config/petsc\_asm.opts }\KeywordTok{|} \FunctionTok{tr} \StringTok{\textquotesingle{}\textbackslash{}n\textquotesingle{}} \StringTok{\textquotesingle{} \textquotesingle{}}\VariableTok{)}\StringTok{"}
+\ExtensionTok{./build/monodomain} \AttributeTok{{-}{-}config}\NormalTok{ config/half\_ellipsoid\_purkinje.options}
+\end{Highlighting}
+\end{Shaded}
+
 
 \end{document}
