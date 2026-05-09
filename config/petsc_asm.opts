@@ -1,0 +1,21 @@
+## PETSc options for cardio-dance monodomain solver.
+## Activated when use_petsc=1 in the .options file. Loaded via PETSC_OPTIONS
+## env var or PetscInitializeFile.
+##
+## Solver: CG with Additive Schwarz preconditioner.
+##  - pc_type asm: Additive Schwarz Method (overlapping subdomain solves)
+##  - pc_asm_overlap 1: 1-element overlap between subdomains
+##  - sub_pc_type ilu: ILU(0) factorization on each local subdomain
+##  - ksp_max_it / ksp_rtol mirror our SimulationConfig values
+##
+## All options are prefixed "mono_" to match the MFEM PetscLinearSolver
+## constructor in LinearSolverFactory.cpp.
+
+-mono_ksp_type cg
+-mono_ksp_max_it 500
+-mono_ksp_rtol 1e-8
+-mono_ksp_norm_type unpreconditioned
+-mono_pc_type asm
+-mono_pc_asm_overlap 1
+-mono_sub_pc_type ilu
+-mono_sub_pc_factor_levels 0
