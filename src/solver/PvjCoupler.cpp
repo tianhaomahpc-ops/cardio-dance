@@ -99,23 +99,75 @@ void PvjCoupler::BuildMapping(const mfem::ParFiniteElementSpace& pfes) {
   local_links_.clear();
   global_num_mapped_ = 0;
   global_max_dist_mm_ = 0.0;
+  const double smear_r = cfg_.pvj_smear_radius_mm;
+  const double smear_r2 = smear_r * smear_r;
+  int n_smear_total = 0;
+
   for (int t = 0; t < n_term; ++t) {
     const double d = out[t].d;
     const int owner = out[t].r;
     terminal_dist_mm_[t] = d;
     terminal_owner_rank_[t] = owner;
-    if (d > cfg_.pvj_max_dist_mm) continue;          // skip too-far terminals
-    if (owner < 0 || owner >= world_size_) continue; // no DOFs near it
+    if (d > cfg_.pvj_max_dist_mm) continue;
+    if (owner < 0 || owner >= world_size_) continue;
     ++global_num_mapped_;
     global_max_dist_mm_ = std::max(global_max_dist_mm_, d);
+
+    // Anchor link: owner rank's nearest DOF, used by AdvancePurkinje for
+    // V_m feedback to the cable.
     if (owner == rank_ && local_tdof[t] >= 0) {
-      LocalPvjLink link;
-      link.purkinje_node = t;       // index into terminal list
-      link.heart_tdof = local_tdof[t];
-      link.owner_rank = owner;
-      link.dist_mm = d;
-      local_links_.push_back(link);
+      LocalPvjLink anchor;
+      anchor.purkinje_node = t;
+      anchor.heart_tdof = local_tdof[t];
+      anchor.owner_rank = owner;
+      anchor.dist_mm = d;
+      anchor.weight = 1.0;
+      anchor.is_anchor = true;
+
+      if (smear_r <= 0.0) {
+        local_links_.push_back(anchor);
+      } else {
+        // Scan owner's local DOFs within the smear ball around the
+        // anchor coordinate, weighted uniformly so the per-terminal
+        // total injection magnitude equals one anchor injection.
+        const double ax = tx[anchor.heart_tdof];
+        const double ay = ty[anchor.heart_tdof];
+        const double az = tz[anchor.heart_tdof];
+        std::vector<int> in_ball;
+        for (int i = 0; i < n_local_tdof; ++i) {
+          const double dx = tx[i] - ax;
+          const double dy = ty[i] - ay;
+          const double dz = tz[i] - az;
+          if (dx * dx + dy * dy + dz * dz <= smear_r2) {
+            in_ball.push_back(i);
+          }
+        }
+        if (in_ball.empty()) {
+          local_links_.push_back(anchor);
+        } else {
+          const double w = 1.0 / static_cast<double>(in_ball.size());
+          n_smear_total += static_cast<int>(in_ball.size());
+          for (size_t k = 0; k < in_ball.size(); ++k) {
+            LocalPvjLink l;
+            l.purkinje_node = t;
+            l.heart_tdof = in_ball[k];
+            l.owner_rank = owner;
+            l.dist_mm = d;
+            l.weight = w;
+            // The first link kept marks the anchor used by AdvancePurkinje.
+            l.is_anchor = (in_ball[k] == anchor.heart_tdof);
+            local_links_.push_back(l);
+          }
+        }
+      }
     }
+  }
+
+  if (rank_ == 0 && smear_r > 0.0) {
+    int global_smear_total = 0;
+    MPI_Reduce(&n_smear_total, &global_smear_total, 1, MPI_INT, MPI_SUM, 0,
+               comm_);
+    (void)global_smear_total;  // can be logged by caller via getter if needed
   }
 }
 
@@ -125,13 +177,14 @@ void PvjCoupler::BuildHeartCouplingCurrent(const mfem::Vector& vm_true,
     heart_current_true.SetSize(vm_true.Size());
   }
   heart_current_true = 0.0;
-  // i_pvj_heart = pvj_g * (V_m - V_p)  [I_ion semantics: positive outward,
-  // so when V_p > V_m this is negative -> depolarizes myocardium].
+  // i_pvj_heart = weight * pvj_g * (V_m - V_p) summed over smeared DOFs.
+  // I_ion outward-positive convention: when V_p > V_m the contribution is
+  // negative, depolarizing the local myocardium.
   for (const auto& lk : local_links_) {
     const double Vp = cable_.TerminalVoltage(lk.purkinje_node);
     const double Vm = vm_true[lk.heart_tdof];
     heart_current_true[lk.heart_tdof] +=
-        cfg_.pvj_g_mS * cfg_.pvj_current_scale * (Vm - Vp);
+        lk.weight * cfg_.pvj_g_mS * cfg_.pvj_current_scale * (Vm - Vp);
   }
 }
 
@@ -169,10 +222,14 @@ void PvjCoupler::AdvancePurkinje(double dt_pde_ms, const mfem::Vector& vm_true,
   std::vector<double> vm_at_terms_local(n_term, 0.0);
   std::vector<double> vm_at_terms_global(n_term, 0.0);
 
+  // Sample V_m only at the anchor (owner rank's single nearest DOF) so the
+  // MPI sum below recovers exactly one owner's value per terminal even
+  // when smearing inflates the local link list.
   for (const auto& lk : local_links_) {
-    vm_at_terms_local[lk.purkinje_node] = vm_true[lk.heart_tdof];
+    if (lk.is_anchor) {
+      vm_at_terms_local[lk.purkinje_node] = vm_true[lk.heart_tdof];
+    }
   }
-  // Combine across ranks: each terminal has at most one owner so SUM == owner.
   if (n_term > 0) {
     MPI_Allreduce(vm_at_terms_local.data(), vm_at_terms_global.data(),
                   n_term, MPI_DOUBLE, MPI_SUM, comm_);

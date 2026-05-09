@@ -122,6 +122,12 @@ struct SimulationConfig {
   double pvj_current_scale = 1.0;
   // Optional anatomical delay buffer between Purkinje and ventricular sampling.
   double pvj_delay_ms = 0.0;
+  // When > 0, the heart-side PVJ injection is smeared over all local DOFs
+  // within this radius of each terminal's anchor DOF, weighted uniformly.
+  // This avoids 3D source-sink mismatch where a single-DOF point source is
+  // drained by surrounding tissue before I_Na can propagate. Setting to 0
+  // falls back to single-anchor injection.
+  double pvj_smear_radius_mm = 0.0;
 
   // ---- Pseudo-ECG far-field probe -----------------------------------------
   // Repeat `pseudo_ecg_probe = name,x,y,z` (mm) once per lead.

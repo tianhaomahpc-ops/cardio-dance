@@ -207,6 +207,7 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "pvj_max_dist_mm") cfg.pvj_max_dist_mm = std::stod(val);
     else if (key == "pvj_current_scale") cfg.pvj_current_scale = std::stod(val);
     else if (key == "pvj_delay_ms") cfg.pvj_delay_ms = std::stod(val);
+    else if (key == "pvj_smear_radius_mm") cfg.pvj_smear_radius_mm = std::stod(val);
     // Regional ionic
     else if (key == "enable_regional_ionic") cfg.enable_regional_ionic = ParseBool(val);
     else if (key == "atria_volume_attrs") cfg.atria_volume_attrs = ParseIntList(val);

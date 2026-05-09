@@ -58,6 +58,10 @@ pvj_g_mS=5.0
 pvj_max_dist_mm=5.0
 pvj_current_scale=4.0
 pvj_delay_ms=0.0
+# Smear each PVJ injection over a 4 mm ball of local DOFs so the initial
+# activation patch is large enough to overcome 3D source-sink mismatch
+# and self-sustain a propagating wave.
+pvj_smear_radius_mm=4.0
 
 # 1-lead pseudo-ECG: probe sits 80 mm in front of heart center along +y.
 enable_pseudo_ecg=1

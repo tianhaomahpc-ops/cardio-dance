@@ -49,6 +49,14 @@ class PvjCoupler {
     int heart_tdof = -1;
     int owner_rank = -1;
     double dist_mm = 0.0;
+    // Smear weight for the heart-side injection. When pvj_smear_radius_mm
+    // is > 0, one terminal expands into multiple LocalPvjLink entries on
+    // the owner rank, each carrying weight = 1/N_local_in_radius so the
+    // per-terminal total injection magnitude is unchanged. The first link
+    // for each terminal (with weight=anchor_weight) is also used by
+    // AdvancePurkinje to sample V_m back to the cable.
+    double weight = 1.0;
+    bool is_anchor = true;
   };
 
   void BuildMapping(const mfem::ParFiniteElementSpace& pfes);
