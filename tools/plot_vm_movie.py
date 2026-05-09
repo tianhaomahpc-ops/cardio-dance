@@ -26,6 +26,32 @@ import numpy as np
 import pyvista as pv
 
 
+def load_purkinje_network(path: Path):
+    """Parse a cardio-dance .network file.
+
+    Returns (pv.PolyData with line segments, terminal point coords array).
+    """
+    with open(path) as f:
+        n_nodes, n_edges = (int(x) for x in f.readline().split())
+        nodes = np.zeros((n_nodes, 3), dtype=float)
+        is_terminal = np.zeros(n_nodes, dtype=bool)
+        for i in range(n_nodes):
+            tokens = f.readline().split()
+            nodes[i] = [float(t) for t in tokens[:3]]
+            is_terminal[i] = int(tokens[3]) != 0
+        edges = []
+        for _ in range(n_edges):
+            tokens = f.readline().split()
+            edges.append((int(tokens[0]), int(tokens[1])))
+
+    lines = np.zeros((len(edges), 3), dtype=int)
+    for k, (a, b) in enumerate(edges):
+        lines[k] = (2, a, b)
+    poly = pv.PolyData(nodes, lines=lines.flatten())
+    terminals = nodes[is_terminal]
+    return poly, terminals
+
+
 def collect_frames(run_dir: Path):
     base = run_dir / "heart" / "monodomain"
     if not base.is_dir():
@@ -57,6 +83,16 @@ def main():
         help="Clip mesh at y>=0 to expose endocardium / wall interior",
     )
     ap.add_argument(
+        "--purkinje-network",
+        default=None,
+        help="optional .network file to overlay as red tubes",
+    )
+    ap.add_argument(
+        "--show-wireframe",
+        action="store_true",
+        help="Overlay mesh edges (slows render, only useful for coarse meshes)",
+    )
+    ap.add_argument(
         "--dt-ms-per-cycle",
         type=float,
         default=0.05,
@@ -73,6 +109,19 @@ def main():
 
     pv.global_theme.allow_empty_mesh = True
     pv.set_plot_theme("document")
+
+    purkinje_poly = None
+    purkinje_terminals = None
+    if args.purkinje_network:
+        purkinje_poly, purkinje_terminals = load_purkinje_network(
+            Path(args.purkinje_network)
+        )
+        print(
+            f"loaded Purkinje: {purkinje_poly.n_points} nodes, "
+            f"{purkinje_poly.n_cells} edges, "
+            f"{len(purkinje_terminals)} terminals",
+            file=sys.stderr,
+        )
 
     frame_dir = Path(tempfile.mkdtemp(prefix="vm_movie_"))
     print(f"writing PNG frames into {frame_dir}", file=sys.stderr)
@@ -91,7 +140,9 @@ def main():
             scalars=args.field,
             cmap=args.cmap,
             clim=(args.vmin, args.vmax),
-            show_edges=False,
+            show_edges=args.show_wireframe,
+            edge_color="0.4",
+            line_width=0.3,
             scalar_bar_args={
                 "title": f"{args.field} (mV)",
                 "vertical": True,
@@ -101,7 +152,20 @@ def main():
             },
             lighting=True,
             specular=0.4,
+            opacity=0.9 if purkinje_poly is not None else 1.0,
         )
+
+        if purkinje_poly is not None:
+            tubes = purkinje_poly.tube(radius=0.4)
+            plotter.add_mesh(
+                tubes, color="#ffd700", lighting=True, specular=1.0
+            )
+            plotter.add_mesh(
+                pv.PolyData(purkinje_terminals),
+                color="red",
+                point_size=8,
+                render_points_as_spheres=True,
+            )
         plotter.add_text(
             f"t = {t_ms:7.1f} ms  (frame {idx + 1}/{len(cycles)})",
             position="upper_edge",

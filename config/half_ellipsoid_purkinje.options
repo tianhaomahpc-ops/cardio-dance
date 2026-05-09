@@ -16,11 +16,12 @@ sigma_f_mS_per_mm=0.1334
 sigma_s_mS_per_mm=0.0176
 sigma_n_mS_per_mm=0.0176
 
-# Time. 250 ms is enough to capture activation + early repolarization
-# for the QRS-like phase of the pseudo-ECG.
+# Time -- truncated to 100 ms (covers full activation + early repol on
+# the fine 0.5 mm mesh); enough to verify propagation without waiting an
+# hour for the run.
 dt_pde_ms=0.05
 dt_ode_ms=0.05
-t_end_ms=250.0
+t_end_ms=100.0
 
 # No direct myocardial stim; activation comes from Purkinje only.
 stim_start_ms=0.0
@@ -70,8 +71,9 @@ pseudo_ecg_sigma_i_mS_per_mm=0.174
 pseudo_ecg_sigma_b_mS_per_mm=0.2
 pseudo_ecg_stride=10
 
-# Solver
+# Solver -- enable BoomerAMG since the fine mesh has ~150k DOFs.
 use_petsc=0
+use_hypre_boomeramg=1
 ksp_max_it=500
 ksp_rtol=1e-8
 
