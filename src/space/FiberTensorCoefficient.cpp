@@ -10,14 +10,22 @@ FiberTensorCoefficient::FiberTensorCoefficient(int dim,
                                                double sigma_n,
                                                mfem::VectorCoefficient& f_coeff,
                                                mfem::VectorCoefficient& s_coeff,
-                                               mfem::VectorCoefficient& n_coeff)
+                                               mfem::VectorCoefficient& n_coeff,
+                                               const std::vector<int>& fibrosis_attrs,
+                                               double fibrosis_scale,
+                                               const std::vector<int>& av_delay_attrs,
+                                               double av_delay_scale)
     : mfem::MatrixCoefficient(dim),
       sigma_f_(sigma_f),
       sigma_s_(sigma_s),
       sigma_n_(sigma_n),
       f_coeff_(f_coeff),
       s_coeff_(s_coeff),
-      n_coeff_(n_coeff) {}
+      n_coeff_(n_coeff),
+      fibrosis_attrs_(fibrosis_attrs.begin(), fibrosis_attrs.end()),
+      fibrosis_scale_(fibrosis_scale),
+      av_delay_attrs_(av_delay_attrs.begin(), av_delay_attrs.end()),
+      av_delay_scale_(av_delay_scale) {}
 
 void FiberTensorCoefficient::Normalize(mfem::Vector& v, const mfem::Vector& fallback) {
   const double n = v.Norml2();
@@ -52,9 +60,21 @@ void FiberTensorCoefficient::Eval(mfem::DenseMatrix& K,
   Normalize(s, s_fb);
   Normalize(n, n_fb);
 
+  double scale = 1.0;
+  if (!fibrosis_attrs_.empty() && T.Attribute > 0 &&
+      fibrosis_attrs_.find(T.Attribute) != fibrosis_attrs_.end()) {
+    scale = fibrosis_scale_;
+  } else if (!av_delay_attrs_.empty() && T.Attribute > 0 &&
+             av_delay_attrs_.find(T.Attribute) != av_delay_attrs_.end()) {
+    scale = av_delay_scale_;
+  }
+  const double sigma_f = sigma_f_ * scale;
+  const double sigma_s = sigma_s_ * scale;
+  const double sigma_n = sigma_n_ * scale;
+
   for (int i = 0; i < height; ++i) {
     for (int j = 0; j < width; ++j) {
-      K(i, j) = sigma_f_ * f[i] * f[j] + sigma_s_ * s[i] * s[j] + sigma_n_ * n[i] * n[j];
+      K(i, j) = sigma_f * f[i] * f[j] + sigma_s * s[i] * s[j] + sigma_n * n[i] * n[j];
     }
   }
 }

@@ -1,0 +1,50 @@
+# Niederer benchmark with x-split regions:
+# atria x in [0,9), fibrosis x in [9,11), ventricle x in [11,20]
+mesh_path=benchmarks/niederer/niederer_xsplit.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# Regional ionic models
+enable_regional_heart_models=1
+atria_volume_attrs=11
+ventricles_volume_attrs=12
+fibrosis_volume_attrs=13
+fibrosis_sigma_scale=0.1
+
+# Material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.005
+dt_ode_ms=0.001
+t_end_ms=100.0
+
+# Stimulus
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+stim_fraction=0.03
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# Output: every 1ms because dt=0.005ms and stride=200
+output_stride=200
+checkpoint_stride=0
+output_dir=output/niederer_100ms_xsplit_regional
+checkpoint_dir=checkpoint/niederer_100ms_xsplit_regional

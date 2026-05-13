@@ -1,0 +1,64 @@
+# Conforming whole-body mesh with 4 volume attributes:
+#   atria=11, ventricles=12, fibrosis=13, torso=2
+enable_wholebody=1
+use_conforming_wholebody=1
+wholebody_mesh_path=benchmarks/wholebody/wholebody_conforming.mesh
+heart_volume_attrs=11,12,13
+torso_volume_attrs=2
+
+# Regional ionic models
+enable_regional_heart_models=1
+atria_volume_attrs=11
+ventricles_volume_attrs=12
+fibrosis_volume_attrs=13
+fibrosis_sigma_scale=0.1
+
+# Heart fibers
+use_fiber_gf=0
+
+# Monodomain effective conductivity
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Recovery conductivity tensors
+sigma_i_f_mS_per_mm=0.174
+sigma_i_s_mS_per_mm=0.019
+sigma_i_n_mS_per_mm=0.019
+sigma_e_f_mS_per_mm=0.625
+sigma_e_s_mS_per_mm=0.236
+sigma_e_n_mS_per_mm=0.236
+
+# Torso conductivity + interface constraints
+sigma_torso_mS_per_mm=0.2
+interface_map_max_dist_mm=1.0
+torso_dirichlet_penalty=1e6
+
+# Time
+dt_pde_ms=0.02
+dt_ode_ms=0.01
+t_end_ms=1.0
+
+# Stimulus
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+
+# Solver
+use_petsc=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# IO
+output_stride=20
+checkpoint_stride=100
+output_dir=output/wholebody_conforming_regional
+checkpoint_dir=checkpoint/wholebody_conforming_regional

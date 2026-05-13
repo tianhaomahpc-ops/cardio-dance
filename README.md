@@ -123,7 +123,7 @@ Outputs:
 - `output/niederer_50ms/monodomain/*.pvd/.pvtu/.vtu`
 - `checkpoint/niederer_50ms/latest.meta`
 - `checkpoint/niederer_50ms/vm_rank%06d.gf` (one shard per MPI rank)
-- `checkpoint/niederer_50ms/tt06_rank%06d.bin` (one shard per MPI rank)
+- `checkpoint/niederer_50ms/ionic_rank%06d.bin` (one shard per MPI rank)
 
 Optional literature-fit comparison run (conductivity scaled, same anisotropy):
 
@@ -169,6 +169,35 @@ stim_region=ball,10.0,3.5,1.5,0.8
 
 Legacy single-box keys (`stim_xmin_mm`...`stim_zmax_mm`) are still supported.
 
+## Purkinje + PVJ + AV delay benchmark case
+
+Generate a 4-zone heart mesh (atria / AV delay / low-conductivity bridge / ventricle):
+
+```bash
+mpirun -np 1 ./build/split_niederer_x_regions_av \
+  --in-mesh benchmarks/niederer/niederer_benchmark.mesh \
+  --out-mesh benchmarks/niederer/niederer_purkinje_avdelay.mesh
+```
+
+Run the coupled case with a built-in V-shaped Purkinje graph:
+
+```bash
+mpirun -np 1 ./build/monodomain --config config/niederer_purkinje_avdelay.options --benchmark-probes 1
+```
+
+One-command validation workflow:
+
+```bash
+NP=1 ./tools/run_purkinje_avdelay_validation.sh
+```
+
+Grid-search calibration (targets in `config/purkinje_avdelay_target_activation.json`):
+
+```bash
+python3 tools/calibrate_purkinje_avdelay.py \
+  --target-json config/purkinje_avdelay_target_activation.json
+```
+
 ## Current coupling scheme
 
 This implementation uses decoupled no-correction steps:
@@ -212,6 +241,7 @@ Optional:
 
 Reference config: `config/wholebody_default.options`
 Conforming reference config: `config/wholebody_conforming.options`
+Conforming regional reference config: `config/wholebody_conforming_regional.options`
 
 Detailed workflow and literature-comparison checklist:
 
