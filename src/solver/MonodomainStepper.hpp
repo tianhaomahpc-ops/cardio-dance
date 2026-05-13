@@ -10,6 +10,9 @@
 
 namespace mono {
 
+class EMCoupler;
+
+
 // Per-step wall-time breakdown for solver and reaction workflow.
 struct StepTimingBreakdown {
   double iion_ms = 0.0;
@@ -18,6 +21,7 @@ struct StepTimingBreakdown {
   double sync_vm_ms = 0.0;
   double ode_advance_ms = 0.0;
   double purkinje_ms = 0.0;
+  double em_coupling_ms = 0.0;
   double step_total_ms = 0.0;
 };
 
@@ -37,6 +41,10 @@ class MonodomainStepper {
   void InitializeFromCurrentVm(int step, double t_ms);
   void Bootstrap();
   void StepNoCorrection();
+
+  // Optional electromechanical coupler. When set, OnStep() is invoked after
+  // ionic and Purkinje advances each step. Pointer must outlive the stepper.
+  void AttachEMCoupler(EMCoupler* coupler) { em_coupler_ = coupler; }
 
   double TimeMs() const { return t_ms_; }
   int StepCount() const { return step_; }
@@ -70,6 +78,7 @@ class MonodomainStepper {
   mfem::Vector stim_true_;
   mfem::Vector pvj_current_true_;
   std::unique_ptr<PurkinjeSystem> purkinje_;
+  EMCoupler* em_coupler_ = nullptr;  // non-owning, optional
   StepTimingBreakdown last_timing_;
 
   void BuildStimulusMask();

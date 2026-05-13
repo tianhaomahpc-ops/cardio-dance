@@ -14,6 +14,7 @@ include(Dependencies)
 add_library(monodomain_core
   src/config/SimulationConfig.cpp
   src/ode/Grandi2011Model.cpp
+  src/ode/Land2017Model.cpp
   src/ode/PassiveModel.cpp
   src/ode/RegionalIonicModel.cpp
   src/ode/TT06Model.cpp
@@ -26,6 +27,12 @@ add_library(monodomain_core
   src/solver/ExtracellularRecoverySolver.cpp
   src/solver/TorsoPotentialSolver.cpp
   src/coupling/InterfaceMapper.cpp
+  src/coupling/EMCoupler.cpp
+  src/coupling/DeformedConductivity.cpp
+  src/mechanics/HolzapfelOgdenMaterial.cpp
+  src/mechanics/HolzapfelOgdenModel.cpp
+  src/mechanics/ActiveStressCoefficient.cpp
+  src/mechanics/MechanicsSolver.cpp
   src/io/OutputManager.cpp
   src/io/CheckpointIO.cpp
   src/ode/tt06_generated.c
@@ -90,3 +97,15 @@ add_test(NAME restart_resume COMMAND test_restart_resume)
 add_executable(test_wholebody_smoke tests/test_wholebody_smoke.cpp)
 target_link_libraries(test_wholebody_smoke PRIVATE monodomain_core)
 add_test(NAME wholebody_smoke COMMAND test_wholebody_smoke)
+
+add_executable(test_land2017_single_cell tests/test_land2017_single_cell.cpp)
+target_link_libraries(test_land2017_single_cell PRIVATE monodomain_core)
+add_test(NAME land2017_single_cell COMMAND test_land2017_single_cell)
+
+add_executable(test_holzapfel_ogden_material tests/test_holzapfel_ogden_material.cpp)
+target_link_libraries(test_holzapfel_ogden_material PRIVATE monodomain_core)
+add_test(NAME holzapfel_ogden_material COMMAND test_holzapfel_ogden_material)
+
+add_executable(test_em_config_parse tests/test_em_config_parse.cpp)
+target_link_libraries(test_em_config_parse PRIVATE monodomain_core)
+add_test(NAME em_config_parse COMMAND test_em_config_parse)

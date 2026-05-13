@@ -5,6 +5,8 @@
 #include <cmath>
 #include <limits>
 
+#include "coupling/EMCoupler.hpp"
+
 namespace mono {
 namespace {
 
@@ -286,6 +288,15 @@ void MonodomainStepper::StepNoCorrection() {
   }
   t_end = Clock::now();
   last_timing_.purkinje_ms += std::chrono::duration<double, std::milli>(t_end - t_begin).count();
+
+  // 7) Electromechanical coupling: advance Land2017 and (every mech_substep)
+  //    solve quasi-static mechanics with deformation-modified conductivity.
+  t_begin = Clock::now();
+  if (em_coupler_) {
+    em_coupler_->OnStep(step_ + 1, t_ms_ + cfg_.dt_pde_ms);
+  }
+  t_end = Clock::now();
+  last_timing_.em_coupling_ms = std::chrono::duration<double, std::milli>(t_end - t_begin).count();
 
   vm_n_ = vm_np1_;
   t_ms_ += cfg_.dt_pde_ms;

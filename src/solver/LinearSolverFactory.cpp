@@ -235,6 +235,12 @@ LinearSystemSolver::~LinearSystemSolver() {
 #endif
 }
 
+void LinearSystemSolver::InvalidatePetscOperator() {
+#ifdef MFEM_USE_PETSC
+  petsc_A_.reset();
+#endif
+}
+
 void LinearSystemSolver::SetOperator(const mfem::HypreParMatrix& A) {
 #ifdef MFEM_USE_PETSC
   if (use_petsc_) {

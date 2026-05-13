@@ -1,0 +1,89 @@
+# Niederer slab + electromechanical (EM) coupling demo.
+# EP: same as niederer_50ms.options.
+# Mechanics: Holzapfel-Ogden + Land 2017, every 1 ms (mech_substep=200 EP steps).
+# Target paper: Jiang, Chen, Cai (2020) Comput Mech 65:1467-1484 + Land 2017 JMCC.
+
+mesh_path=benchmarks/niederer/niederer_benchmark.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/niederer/fiber_f.gf
+fiber_s_path=benchmarks/niederer/fiber_s.gf
+fiber_n_path=benchmarks/niederer/fiber_n.gf
+
+# EP material (mS/mm, uF/mm^2, mm^-1)
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.005
+dt_ode_ms=0.005
+t_end_ms=200.0
+
+# Stimulus
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-15.0
+stim_xmin_mm=0.0
+stim_xmax_mm=1.5
+stim_ymin_mm=0.0
+stim_ymax_mm=1.5
+stim_zmin_mm=0.0
+stim_zmax_mm=1.5
+
+# Solver
+use_petsc=1
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# ---------- Electromechanical coupling ----------
+mechanics_enable=1
+mech_substep=200   # 200 * 0.005ms = 1 ms between mech solves
+
+# Holzapfel-Ogden (Holzapfel-Ogden 2009 Table 1, transversely isotropic LV)
+mech_ho_a=0.059
+mech_ho_b=8.023
+mech_ho_af=18.472
+mech_ho_bf=16.026
+mech_ho_as=2.481
+mech_ho_bs=11.120
+mech_ho_afs=0.216
+mech_ho_bfs=11.436
+mech_ho_kappa=1000.0
+
+# Slab BC: clamp x=0 face (attr 1).
+mech_bdr_base_attr=1
+mech_bdr_endo_attr=2
+mech_bdr_epi_attr=3
+mech_endo_pressure_pa=0.0
+mech_peri_spring_k_kpa_per_mm=0.0
+
+# Land 2017 (human cardiomyocyte; defaults)
+land_Tref_kPa=120.0
+land_Ca50_uM=0.805
+land_n_trpn=2.0
+land_k_trpn=0.1
+land_n_tm=5.0
+land_TRPN50=0.35
+land_k_tm_unb=0.04
+land_phi=2.23
+land_k_uw=0.026
+land_k_ws=0.004
+land_k_su=0.00015
+
+# Mechanics solver
+mech_snes_max_it=30
+mech_snes_rtol=1e-6
+mech_snes_atol=1e-10
+mech_snes_print_level=0
+mech_ksp_max_it=500
+mech_ksp_rtol=1e-6
+mech_asm_overlap=1
+
+# Output
+output_stride=100
+checkpoint_stride=2000
+output_dir=output/niederer_em_demo
+checkpoint_dir=checkpoint/niederer_em_demo

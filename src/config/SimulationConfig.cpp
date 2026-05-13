@@ -215,6 +215,52 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "checkpoint_stride") cfg.checkpoint_stride = std::stoi(val);
     else if (key == "output_dir") cfg.output_dir = val;
     else if (key == "checkpoint_dir") cfg.checkpoint_dir = val;
+    // ---------- Electromechanical (EM) coupling ----------
+    else if (key == "mechanics_enable") cfg.mechanics_enable = ParseBool(val);
+    else if (key == "mech_substep") cfg.mech_substep = std::stoi(val);
+    else if (key == "mech_ho_a") cfg.mech_ho_a = std::stod(val);
+    else if (key == "mech_ho_b") cfg.mech_ho_b = std::stod(val);
+    else if (key == "mech_ho_af") cfg.mech_ho_af = std::stod(val);
+    else if (key == "mech_ho_bf") cfg.mech_ho_bf = std::stod(val);
+    else if (key == "mech_ho_as") cfg.mech_ho_as = std::stod(val);
+    else if (key == "mech_ho_bs") cfg.mech_ho_bs = std::stod(val);
+    else if (key == "mech_ho_afs") cfg.mech_ho_afs = std::stod(val);
+    else if (key == "mech_ho_bfs") cfg.mech_ho_bfs = std::stod(val);
+    else if (key == "mech_ho_kappa") cfg.mech_ho_kappa = std::stod(val);
+    else if (key == "mech_bdr_base_attr") cfg.mech_bdr_base_attr = std::stoi(val);
+    else if (key == "mech_bdr_endo_attr") cfg.mech_bdr_endo_attr = std::stoi(val);
+    else if (key == "mech_bdr_epi_attr") cfg.mech_bdr_epi_attr = std::stoi(val);
+    else if (key == "mech_endo_pressure_pa") cfg.mech_endo_pressure_pa = std::stod(val);
+    else if (key == "mech_peri_spring_k_kpa_per_mm") cfg.mech_peri_spring_k_kpa_per_mm = std::stod(val);
+    else if (key == "land_Tref_kPa") cfg.land_Tref_kPa = std::stod(val);
+    else if (key == "land_Ca50_uM") cfg.land_Ca50_uM = std::stod(val);
+    else if (key == "land_n_trpn") cfg.land_n_trpn = std::stod(val);
+    else if (key == "land_k_trpn") cfg.land_k_trpn = std::stod(val);
+    else if (key == "land_n_tm") cfg.land_n_tm = std::stod(val);
+    else if (key == "land_TRPN50") cfg.land_TRPN50 = std::stod(val);
+    else if (key == "land_k_tm_unb") cfg.land_k_tm_unb = std::stod(val);
+    else if (key == "land_phi") cfg.land_phi = std::stod(val);
+    else if (key == "land_k_uw") cfg.land_k_uw = std::stod(val);
+    else if (key == "land_k_ws") cfg.land_k_ws = std::stod(val);
+    else if (key == "land_k_su") cfg.land_k_su = std::stod(val);
+    else if (key == "land_gamma_s") cfg.land_gamma_s = std::stod(val);
+    else if (key == "land_gamma_w") cfg.land_gamma_w = std::stod(val);
+    else if (key == "land_beta_0") cfg.land_beta_0 = std::stod(val);
+    else if (key == "land_beta_1") cfg.land_beta_1 = std::stod(val);
+    else if (key == "land_lambda_min") cfg.land_lambda_min = std::stod(val);
+    else if (key == "land_lambda_max") cfg.land_lambda_max = std::stod(val);
+    else if (key == "land_r_s") cfg.land_r_s = std::stod(val);
+    else if (key == "land_r_w") cfg.land_r_w = std::stod(val);
+    else if (key == "land_A_eff") cfg.land_A_eff = std::stod(val);
+    else if (key == "land_cd_tau_ms") cfg.land_cd_tau_ms = std::stod(val);
+    else if (key == "land_lam_tau_ms") cfg.land_lam_tau_ms = std::stod(val);
+    else if (key == "mech_snes_max_it") cfg.mech_snes_max_it = std::stoi(val);
+    else if (key == "mech_snes_rtol") cfg.mech_snes_rtol = std::stod(val);
+    else if (key == "mech_snes_atol") cfg.mech_snes_atol = std::stod(val);
+    else if (key == "mech_snes_print_level") cfg.mech_snes_print_level = std::stoi(val);
+    else if (key == "mech_ksp_max_it") cfg.mech_ksp_max_it = std::stoi(val);
+    else if (key == "mech_ksp_rtol") cfg.mech_ksp_rtol = std::stod(val);
+    else if (key == "mech_asm_overlap") cfg.mech_asm_overlap = std::stoi(val);
     else {
       throw std::runtime_error("Unknown config key: " + key);
     }
@@ -339,6 +385,24 @@ SimulationConfig LoadConfigFile(const std::string& path) {
       if (node < 0) {
         throw std::runtime_error("purkinje_stim_nodes must be non-negative");
       }
+    }
+  }
+  if (cfg.mechanics_enable) {
+    if (!cfg.use_fiber_gf) {
+      throw std::runtime_error(
+          "mechanics_enable=1 requires use_fiber_gf=1 (Holzapfel-Ogden needs fiber f0/s0)");
+    }
+    if (cfg.mech_bdr_base_attr <= 0) {
+      throw std::runtime_error("mech_bdr_base_attr must be >= 1");
+    }
+    if (cfg.mech_ho_kappa <= 0.0) {
+      throw std::runtime_error("mech_ho_kappa must be > 0 (volumetric penalty)");
+    }
+    if (cfg.mech_substep < 0) {
+      throw std::runtime_error("mech_substep must be >= 0 (0 disables mechanics resolves)");
+    }
+    if (cfg.land_Ca50_uM <= 0.0) {
+      throw std::runtime_error("land_Ca50_uM must be > 0");
     }
   }
   return cfg;

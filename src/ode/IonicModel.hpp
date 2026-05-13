@@ -20,6 +20,10 @@ class IonicModel {
 
   virtual int NumNodes() const = 0;
   virtual const char* ModelTag() const = 0;
+
+  // Optional: cytosolic [Ca2+] in mM. Returns false if not exposed.
+  // Default no-op so non-EM-capable models compile unchanged.
+  virtual bool GetCytosolicCalcium(mfem::Vector& /*cai_true_mM*/) const { return false; }
 };
 
 }  // namespace mono

@@ -123,6 +123,64 @@ struct SimulationConfig {
   int checkpoint_stride = 100;
   std::string output_dir = "output";
   std::string checkpoint_dir = "checkpoint";
+
+  // ---------- Electromechanical (EM) coupling ----------
+  // Master switch; when false, all mechanics machinery is bypassed.
+  bool mechanics_enable = false;
+  // EP steps between successive mechanics solves (e.g. 50 EP steps * 0.02ms
+  // = mechanics every 1 ms). Set <= 0 to disable mechanics resolves.
+  int mech_substep = 50;
+
+  // Holzapfel-Ogden material (kPa unless noted).
+  double mech_ho_a     = 0.059;
+  double mech_ho_b     = 8.023;
+  double mech_ho_af    = 18.472;
+  double mech_ho_bf    = 16.026;
+  double mech_ho_as    = 2.481;
+  double mech_ho_bs    = 11.120;
+  double mech_ho_afs   = 0.216;
+  double mech_ho_bfs   = 11.436;
+  double mech_ho_kappa = 1000.0;   // volumetric penalty
+
+  // Boundary attributes for mechanics.
+  int    mech_bdr_base_attr = 1;
+  int    mech_bdr_endo_attr = 2;
+  int    mech_bdr_epi_attr  = 3;
+  double mech_endo_pressure_pa = 0.0;   // applied on bdr_endo_attr (follower load)
+  double mech_peri_spring_k_kpa_per_mm = 0.5;  // Robin spring on bdr_epi_attr
+
+  // Land 2017 parameters (overrides for the C++-side struct defaults).
+  double land_Tref_kPa    = 120.0;
+  double land_Ca50_uM     = 0.805;
+  double land_n_trpn      = 2.0;
+  double land_k_trpn      = 0.1;
+  double land_n_tm        = 5.0;
+  double land_TRPN50      = 0.35;
+  double land_k_tm_unb    = 0.04;
+  double land_phi         = 2.23;
+  double land_k_uw        = 0.026;
+  double land_k_ws        = 0.004;
+  double land_k_su        = 0.00015;
+  double land_gamma_s     = 0.0085;
+  double land_gamma_w     = 0.615;
+  double land_beta_0      = 2.3;
+  double land_beta_1      = -2.4;
+  double land_lambda_min  = 0.87;
+  double land_lambda_max  = 1.2;
+  double land_r_s         = 0.25;
+  double land_r_w         = 0.5;
+  double land_A_eff       = 25.0;
+  double land_cd_tau_ms   = 200.0;
+  double land_lam_tau_ms  = 100.0;
+
+  // Nonlinear / linear solver for mechanics.
+  int    mech_snes_max_it     = 30;
+  double mech_snes_rtol       = 1e-6;
+  double mech_snes_atol       = 1e-10;
+  int    mech_snes_print_level = 0;
+  int    mech_ksp_max_it      = 500;
+  double mech_ksp_rtol        = 1e-6;
+  int    mech_asm_overlap     = 1;
 };
 
 // Parse key=value config file with strict key validation.

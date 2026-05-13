@@ -30,6 +30,10 @@ class TT06Model : public IonicModel {
   int NumNodes() const override { return n_nodes_; }
   const char* ModelTag() const override { return "TT06"; }
 
+  // TT06 state index 3 is cytosolic Ca_i (mM). Initial rest value 1.26e-4.
+  bool GetCytosolicCalcium(mfem::Vector& cai_true_mM) const override;
+  static constexpr int CaiStateIndex() { return 3; }
+
  private:
   static constexpr int kNumStates = 19;
   static constexpr int kNumRates = 19;

@@ -23,6 +23,10 @@ class LinearSystemSolver {
   ~LinearSystemSolver();
 
   void SetOperator(const mfem::HypreParMatrix& A);
+  // EM coupling: force re-creation of the cached PETSc AIJ matrix on the
+  // next SetOperator() call (needed when A has been rebuilt due to
+  // deformation-modified conductivity). No-op when MFEM_USE_PETSC is off.
+  void InvalidatePetscOperator();
   void Solve(const mfem::Vector& rhs, mfem::Vector& x);
   int LastNumIterations() const { return last_num_iterations_; }
   double LastFinalNorm() const { return last_final_norm_; }

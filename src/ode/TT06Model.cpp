@@ -148,6 +148,15 @@ void TT06Model::AdvanceStates(double dt_pde_ms, double dt_ode_ms, const mfem::Ve
   }
 }
 
+bool TT06Model::GetCytosolicCalcium(mfem::Vector& cai_true_mM) const {
+  cai_true_mM.SetSize(n_nodes_);
+  constexpr int idx = CaiStateIndex();
+  for (int node = 0; node < n_nodes_; ++node) {
+    cai_true_mM[node] = states_[static_cast<size_t>(node) * kNumStates + idx];
+  }
+  return true;
+}
+
 void TT06Model::SaveState(std::ostream& os) const {
   const int32_t n = n_nodes_;
   os.write(reinterpret_cast<const char*>(&n), sizeof(n));
