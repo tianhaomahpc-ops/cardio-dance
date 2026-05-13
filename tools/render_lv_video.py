@@ -23,7 +23,10 @@ import vtk
 from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkCommonColor import vtkNamedColors  # noqa: F401
 
-# Force offscreen rendering (no X server in headless CI).
+# Force software OSMesa-style rendering. The VTK 9.1 packaged in
+# python3-vtk9 still defers to the X system for OpenGL context creation,
+# so this script must be wrapped with xvfb-run (the run_lv_em_video.sh
+# wrapper does so).
 os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
 os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
 
@@ -98,14 +101,16 @@ def make_camera(bounds):
     return cam
 
 
-def render_panel(ug, field, lut, camera, size, title):
+def make_panel_renderer(field, lut, title, camera, viewport):
+    """Build one renderer for either Vm or Ta_kPa. Actor's mapper is rebound
+    each frame in render_pair() — we keep one RenderWindow open across the
+    whole video to avoid the X-server-context churn that crashes VTK 9.1."""
     ren = vtk.vtkRenderer()
     ren.SetBackground(0.06, 0.06, 0.08)
+    ren.SetViewport(*viewport)
     ren.SetActiveCamera(camera)
 
-    mapper = make_mapper(ug, field, lut)
     actor = vtk.vtkActor()
-    actor.SetMapper(mapper)
     actor.GetProperty().SetAmbient(0.25)
     actor.GetProperty().SetDiffuse(0.7)
     actor.GetProperty().EdgeVisibilityOff()
@@ -123,42 +128,24 @@ def render_panel(ug, field, lut, camera, size, title):
     sb.GetTitleTextProperty().SetFontSize(14)
     sb.GetLabelTextProperty().SetFontSize(12)
     ren.AddActor2D(sb)
+    return ren, actor
 
-    rw = vtk.vtkRenderWindow()
-    rw.SetOffScreenRendering(1)
-    rw.AddRenderer(ren)
-    rw.SetSize(*size)
-    rw.Render()
 
-    w2i = vtk.vtkWindowToImageFilter()
-    w2i.SetInput(rw)
-    w2i.SetInputBufferTypeToRGB()
-    w2i.ReadFrontBufferOff()
+def render_pair(ug, renderers, lut_pair, render_window, w2i, png_path):
+    ren_vm, ren_ta = renderers
+    actor_vm = ren_vm.GetActors().GetLastActor()
+    actor_ta = ren_ta.GetActors().GetLastActor()
+    actor_vm.SetMapper(make_mapper(ug, "Vm", lut_pair[0]))
+    actor_ta.SetMapper(make_mapper(ug, "Ta_kPa", lut_pair[1]))
+    render_window.Render()
+    w2i.Modified()
     w2i.Update()
-    return w2i.GetOutput()
+    writer = vtk.vtkPNGWriter()
+    writer.SetFileName(str(png_path))
+    writer.SetInputData(w2i.GetOutput())
+    writer.Write()
 
 
-def hstack_images(left: vtk.vtkImageData, right: vtk.vtkImageData):
-    appender = vtk.vtkImageAppend()
-    appender.SetAppendAxis(0)
-    appender.AddInputData(left)
-    appender.AddInputData(right)
-    appender.Update()
-    return appender.GetOutput()
-
-
-def add_overlay(image, text):
-    text_image = vtk.vtkTextRenderer.GetInstance()
-    # Simpler: blend a tiny render of text over the corner via a 2D actor.
-    # The combined image already includes scalar bars; we just print to stdout.
-    return image
-
-
-def write_png(image: vtk.vtkImageData, path: Path):
-    w = vtk.vtkPNGWriter()
-    w.SetFileName(str(path))
-    w.SetInputData(image)
-    w.Write()
 
 
 def cycle_to_time_ms(pvtu_path: Path, dt_pde_ms: float) -> float:
@@ -191,52 +178,65 @@ def main():
     print(f"found {len(pvtus)} frames in {case_dir}")
 
     # Pass 1: compute global ranges for Vm and Ta_kPa across all frames.
+    # Clip to physical bounds so any single corrupted frame can't blow up
+    # the color scale for the whole video.
+    vm_lo_phys, vm_hi_phys = -100.0, 60.0   # mV
+    ta_hi_phys = 200.0                       # kPa (Land typical max < 150)
     vm_min, vm_max = +np.inf, -np.inf
-    ta_min, ta_max = 0.0, -np.inf
+    ta_max = -np.inf
     for f in pvtus:
         ug = read_frame(f)
         pd = ug.GetPointData()
-        for name, (lo, hi) in (("Vm", (vm_min, vm_max)), ("Ta_kPa", (ta_min, ta_max))):
-            arr = pd.GetArray(name)
-            if arr is None:
-                continue
-            rng = arr.GetRange()
-            if name == "Vm":
-                vm_min = min(vm_min, rng[0])
-                vm_max = max(vm_max, rng[1])
-            else:
-                ta_min = min(ta_min, rng[0])
-                ta_max = max(ta_max, rng[1])
-    if not np.isfinite(vm_min):
+        vm_arr = pd.GetArray("Vm")
+        if vm_arr is not None:
+            r = vm_arr.GetRange()
+            if vm_lo_phys < r[0] < vm_hi_phys:
+                vm_min = min(vm_min, r[0])
+            if vm_lo_phys < r[1] < vm_hi_phys:
+                vm_max = max(vm_max, r[1])
+        ta_arr = pd.GetArray("Ta_kPa")
+        if ta_arr is not None:
+            r = ta_arr.GetRange()
+            if 0.0 <= r[1] < ta_hi_phys:
+                ta_max = max(ta_max, r[1])
+    if not np.isfinite(vm_min) or not np.isfinite(vm_max):
         vm_min, vm_max = -90.0, 30.0
     if not np.isfinite(ta_max) or ta_max <= 0.0:
-        ta_max = 1.0
+        ta_max = 50.0
     print(f"Vm range: [{vm_min:.2f}, {vm_max:.2f}] mV")
-    print(f"Ta range: [{ta_min:.2f}, {ta_max:.2f}] kPa")
+    print(f"Ta range: [0.00, {ta_max:.2f}] kPa")
 
     lut_vm = make_lut((vm_min, vm_max), "Vm")
     lut_ta = make_lut((0.0, max(ta_max, 1.0)), "Ta_kPa")
 
-    # Compute camera once from the first warped frame.
+    # Compute camera once from the first warped frame. Use the entire mesh
+    # bounds (no warp dependency) so the camera frames the LV consistently
+    # across all frames.
     first = warp_by_displacement(read_frame(pvtus[0]), factor=args.warp)
     cam = make_camera(first.GetBounds())
 
-    panel_size = (args.width, args.height)
+    # Single composite render window: left half = Vm, right half = Ta_kPa.
+    full_size = (2 * args.width, args.height)
+    ren_vm, _ = make_panel_renderer("Vm", lut_vm, "Vm (mV)", cam,
+                                     viewport=(0.0, 0.0, 0.5, 1.0))
+    ren_ta, _ = make_panel_renderer("Ta_kPa", lut_ta, "Ta (kPa)", cam,
+                                     viewport=(0.5, 0.0, 1.0, 1.0))
+    rw = vtk.vtkRenderWindow()
+    rw.SetOffScreenRendering(1)
+    rw.AddRenderer(ren_vm)
+    rw.AddRenderer(ren_ta)
+    rw.SetSize(*full_size)
+
+    w2i = vtk.vtkWindowToImageFilter()
+    w2i.SetInput(rw)
+    w2i.SetInputBufferTypeToRGB()
+    w2i.ReadFrontBufferOff()
 
     for i, f in enumerate(pvtus):
         ug = read_frame(f)
         ug_warp = warp_by_displacement(ug, factor=args.warp)
-
-        img_vm = render_panel(ug_warp, "Vm", lut_vm, cam, panel_size, "Vm (mV)")
-        img_ta = render_panel(ug_warp, "Ta_kPa", lut_ta, cam, panel_size, "Ta (kPa)")
-        composite = hstack_images(img_vm, img_ta)
-
-        # Overlay timestamp via simple TextActor on a fresh render of the composite.
-        # Implementation skipped to keep the script vtk-only and dependency-free;
-        # ffmpeg drawtext could add it instead if a font is available.
-
         png_path = frames_dir / f"frame_{i:04d}.png"
-        write_png(composite, png_path)
+        render_pair(ug_warp, (ren_vm, ren_ta), (lut_vm, lut_ta), rw, w2i, png_path)
         if i % 10 == 0:
             print(f"  rendered {i+1}/{len(pvtus)}")
 

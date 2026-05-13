@@ -35,7 +35,9 @@ rm -rf output/lv_ellipsoid_em_video
 mpirun --allow-run-as-root -np "$NP" ./build/monodomain --config "$CONFIG"
 
 echo "[step 3/3] rendering MP4"
-python3.12 tools/render_lv_video.py \
+# VTK 9.1 (python3-vtk9) requires an X display for the OpenGL render window;
+# xvfb-run provides a virtual one for headless boxes.
+xvfb-run -a -s "-screen 0 1440x720x24" python3.12 tools/render_lv_video.py \
   --case output/lv_ellipsoid_em_video \
   --warp "$WARP" \
   --fps "$FPS"
