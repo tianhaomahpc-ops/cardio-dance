@@ -278,6 +278,14 @@ ParaView render of Vm (left, mV) and active tension Ta (right, kPa) on the
 deforming LV through the action potential + contraction. Requires
 `python3-vtk9 python3-numpy ffmpeg`.
 
+A reference render of the 150 ms run lives at `docs/media/lv_em_150ms.mp4`:
+
+- Action potential propagates from the apex stimulus, peak Vm ~ +32 mV
+- Land 2017 active tension peaks at ~34 kPa around t = 50 ms
+- Apex region contracts radially; max displacement ~ 0.62 mm (warp = 5x in
+  the rendered video to make it visible against the 17 mm short axis)
+- J = det F stays in [0.97, 1.02] throughout the cycle
+
 Detailed workflow and literature-comparison checklist:
 
 - `docs/wholebody_workflow.md`
