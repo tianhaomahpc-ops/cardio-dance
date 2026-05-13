@@ -16,7 +16,13 @@ find_path(MFEM_CONFIG_DIR
   DOC "MFEM configuration directory"
 )
 
+# Fall back to MFEMConfig.cmake (apt / homebrew style) when no Spack-style
+# config.mk is available.
 if(NOT MFEM_CONFIG_DIR)
+  find_package(MFEM CONFIG QUIET)
+  if(MFEM_FOUND AND TARGET mfem)
+    return()
+  endif()
   set(MFEM_FOUND FALSE)
   return()
 endif()

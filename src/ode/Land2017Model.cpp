@@ -9,6 +9,9 @@
 
 namespace mono {
 
+Land2017Model::Land2017Model(int n_local_true_dofs)
+    : Land2017Model(n_local_true_dofs, Params{}) {}
+
 Land2017Model::Land2017Model(int n_local_true_dofs, const Params& params)
     : n_nodes_(n_local_true_dofs),
       params_(params),

@@ -31,7 +31,7 @@ void InterfaceMapper::BuildTrueDofCoordinates(const mfem::ParFiniteElementSpace&
 }
 
 InterfaceMapper::InterfaceMapper(const SimulationConfig& cfg,
-                                 const Assembler& heart,
+                                 Assembler& heart,
                                  const TorsoPotentialSolver& torso,
                                  MPI_Comm comm)
     : cfg_(cfg), heart_(heart), torso_(torso), comm_(comm) {

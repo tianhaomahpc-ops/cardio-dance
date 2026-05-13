@@ -98,7 +98,7 @@ class ActiveTensionHyperelasticModel : public mfem::HyperelasticModel {
  private:
   const mfem::ParGridFunction& ta_gf_;
   mfem::VectorCoefficient& f0_coeff_;
-  mfem::GridFunctionCoefficient ta_coeff_;
+  mutable mfem::GridFunctionCoefficient ta_coeff_;
 };
 
 }  // namespace

@@ -55,10 +55,12 @@ void MakeUnstructuredTetByVertexJitter(mfem::Mesh& mesh,
   }
 
   // Ensure all tetrahedra keep positive orientation after perturbation.
-  mfem::DenseMatrix jac;
   for (int e = 0; e < mesh.GetNE(); ++e) {
-    mesh.GetElementJacobian(e, jac);
-    if (jac.Det() <= std::numeric_limits<double>::epsilon()) {
+    mfem::IsoparametricTransformation tr;
+    mesh.GetElementTransformation(e, &tr);
+    const mfem::IntegrationPoint& ip = mfem::Geometries.GetCenter(tr.GetGeometryType());
+    tr.SetIntPoint(&ip);
+    if (tr.Jacobian().Det() <= std::numeric_limits<double>::epsilon()) {
       throw std::runtime_error(
           "Generated tetra mesh has non-positive Jacobian after jitter.");
     }

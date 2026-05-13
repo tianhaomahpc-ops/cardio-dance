@@ -54,7 +54,8 @@ class Land2017Model {
     double lam_tau   = 100.0;     // ms, sarcomere length filter constant
   };
 
-  explicit Land2017Model(int n_local_true_dofs, const Params& params = Params{});
+  explicit Land2017Model(int n_local_true_dofs);
+  Land2017Model(int n_local_true_dofs, const Params& params);
 
   // Reset all nodes to algebraic rest state at lambda=1, Ca=0.
   void InitializeRestState();

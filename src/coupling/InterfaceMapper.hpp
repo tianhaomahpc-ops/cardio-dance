@@ -14,7 +14,7 @@ namespace mono {
 class InterfaceMapper {
  public:
   InterfaceMapper(const SimulationConfig& cfg,
-                  const Assembler& heart,
+                  Assembler& heart,
                   const TorsoPotentialSolver& torso,
                   MPI_Comm comm);
 
@@ -31,7 +31,7 @@ class InterfaceMapper {
                                       mfem::Vector& z_true);
 
   const SimulationConfig& cfg_;
-  const Assembler& heart_;
+  Assembler& heart_;
   const TorsoPotentialSolver& torso_;
   MPI_Comm comm_;
   int rank_ = 0;
