@@ -243,6 +243,30 @@ Reference config: `config/wholebody_default.options`
 Conforming reference config: `config/wholebody_conforming.options`
 Conforming regional reference config: `config/wholebody_conforming_regional.options`
 
+## LV electromechanical benchmark (idealized prolate ellipsoid)
+
+Idealized truncated-ellipsoid left-ventricle case after Land et al. (2015)
+"Verification of cardiac mechanics software". Pairs Holzapfel-Ogden passive +
+Land 2017 active tension with the monodomain EP model through `EMCoupler`.
+
+Generate the LV mesh and helical fiber files (default 32 x 16 x 4 hex shell):
+
+```bash
+mpirun -np 1 ./build/generate_lv_ellipsoid_case --out-dir benchmarks/lv_ellipsoid
+```
+
+Run the coupled EM simulation (TT06 + Holzapfel-Ogden + Land 2017):
+
+```bash
+mpirun -np 1 ./build/monodomain --config config/lv_ellipsoid_em.options
+```
+
+Boundary attributes produced by the generator:
+
+- `1`: base ring (z = z_base), used for mechanics Dirichlet clamp
+- `2`: endocardium (inner surface)
+- `3`: epicardium (outer surface)
+
 Detailed workflow and literature-comparison checklist:
 
 - `docs/wholebody_workflow.md`

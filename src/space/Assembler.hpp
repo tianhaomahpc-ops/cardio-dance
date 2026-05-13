@@ -40,6 +40,12 @@ class Assembler {
   const mfem::ParGridFunction* FiberS() const { return fiber_s_gf_.get(); }
   const mfem::ParGridFunction* FiberN() const { return fiber_n_gf_.get(); }
 
+  // Returns the active VectorCoefficient for the fiber/sheet/normal direction
+  // (constant fallback or grid-function-based, depending on use_fiber_gf).
+  mfem::VectorCoefficient& FiberFCoefficient();
+  mfem::VectorCoefficient& FiberSCoefficient();
+  mfem::VectorCoefficient& FiberNCoefficient();
+
  private:
   void InitializeFiberCoefficients(int dim);
 

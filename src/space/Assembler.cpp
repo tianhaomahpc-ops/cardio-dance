@@ -163,6 +163,27 @@ void Assembler::InitializeFiberCoefficients(int dim) {
   use_loaded_fibers_ = true;
 }
 
+mfem::VectorCoefficient& Assembler::FiberFCoefficient() {
+  if (use_loaded_fibers_) {
+    return *fiber_f_coeff_;
+  }
+  return *const_f_coeff_;
+}
+
+mfem::VectorCoefficient& Assembler::FiberSCoefficient() {
+  if (use_loaded_fibers_) {
+    return *fiber_s_coeff_;
+  }
+  return *const_s_coeff_;
+}
+
+mfem::VectorCoefficient& Assembler::FiberNCoefficient() {
+  if (use_loaded_fibers_) {
+    return *fiber_n_coeff_;
+  }
+  return *const_n_coeff_;
+}
+
 void Assembler::BuildSystemMatrices(double dt_pde_ms) {
   if (dt_pde_ms <= 0.0) {
     throw std::runtime_error("BuildSystemMatrices requires dt_pde_ms > 0");

@@ -74,6 +74,9 @@ target_link_libraries(split_niederer_x_regions PRIVATE monodomain_core)
 add_executable(split_niederer_x_regions_av tools/split_niederer_x_regions_av.cpp)
 target_link_libraries(split_niederer_x_regions_av PRIVATE monodomain_core)
 
+add_executable(generate_lv_ellipsoid_case tools/generate_lv_ellipsoid_case.cpp)
+target_link_libraries(generate_lv_ellipsoid_case PRIVATE monodomain_core)
+
 add_executable(test_tt06_single_cell tests/test_tt06_single_cell.cpp)
 target_link_libraries(test_tt06_single_cell PRIVATE monodomain_core)
 add_test(NAME tt06_single_cell COMMAND test_tt06_single_cell)

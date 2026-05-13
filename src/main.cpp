@@ -15,11 +15,14 @@
 #include "mfem.hpp"
 
 #include "config/SimulationConfig.hpp"
+#include "coupling/EMCoupler.hpp"
 #include "coupling/InterfaceMapper.hpp"
 #include "io/CheckpointIO.hpp"
 #include "io/OutputManager.hpp"
+#include "mechanics/MechanicsSolver.hpp"
 #include "ode/Grandi2011Model.hpp"
 #include "ode/IonicModel.hpp"
+#include "ode/Land2017Model.hpp"
 #include "ode/PassiveModel.hpp"
 #include "ode/RegionalIonicModel.hpp"
 #include "ode/TT06Model.hpp"
@@ -157,6 +160,51 @@ int main(int argc, char* argv[]) {
                     << interface_mapper->GlobalNumConstrainedDofs()
                     << ", max map dist(mm)="
                     << interface_mapper->GlobalMaxConstrainedDistMm() << std::endl;
+        }
+      }
+
+      // ---------- Electromechanical coupling (optional) ----------
+      std::unique_ptr<mono::Land2017Model> land_model;
+      std::unique_ptr<mono::MechanicsSolver> mech_solver;
+      std::unique_ptr<mono::EMCoupler> em_coupler;
+      if (cfg.mechanics_enable) {
+        mono::Land2017Model::Params land_params;
+        land_params.Tref       = cfg.land_Tref_kPa;
+        land_params.Ca50_uM    = cfg.land_Ca50_uM;
+        land_params.n_trpn     = cfg.land_n_trpn;
+        land_params.k_trpn     = cfg.land_k_trpn;
+        land_params.n_tm       = cfg.land_n_tm;
+        land_params.TRPN50     = cfg.land_TRPN50;
+        land_params.k_tm_unb   = cfg.land_k_tm_unb;
+        land_params.phi        = cfg.land_phi;
+        land_params.k_uw       = cfg.land_k_uw;
+        land_params.k_ws       = cfg.land_k_ws;
+        land_params.k_su       = cfg.land_k_su;
+        land_params.gamma_s    = cfg.land_gamma_s;
+        land_params.gamma_w    = cfg.land_gamma_w;
+        land_params.beta_0     = cfg.land_beta_0;
+        land_params.beta_1     = cfg.land_beta_1;
+        land_params.lambda_min = cfg.land_lambda_min;
+        land_params.lambda_max = cfg.land_lambda_max;
+        land_params.r_s        = cfg.land_r_s;
+        land_params.r_w        = cfg.land_r_w;
+        land_params.A_eff      = cfg.land_A_eff;
+        land_params.cd_tau     = cfg.land_cd_tau_ms;
+        land_params.lam_tau    = cfg.land_lam_tau_ms;
+        land_model = std::make_unique<mono::Land2017Model>(assembler.TrueVSize(), land_params);
+
+        mech_solver = std::make_unique<mono::MechanicsSolver>(cfg,
+                                                              assembler.PFES(),
+                                                              assembler.FiberFCoefficient(),
+                                                              assembler.FiberSCoefficient(),
+                                                              MPI_COMM_WORLD);
+        mech_solver->SetEndocardialPressurePa(cfg.mech_endo_pressure_pa);
+        em_coupler = std::make_unique<mono::EMCoupler>(
+            cfg, assembler, *ionic_model, *land_model, *mech_solver, linear_solver);
+        if (rank == 0) {
+          std::cout << "[em] mechanics enabled, substep=" << cfg.mech_substep
+                    << ", land_Tref=" << cfg.land_Tref_kPa << " kPa"
+                    << ", endo_pressure_pa=" << cfg.mech_endo_pressure_pa << std::endl;
         }
       }
 
@@ -461,6 +509,11 @@ int main(int argc, char* argv[]) {
           write_probe_vm_row(stepper.TimeMs(), vm0);
         }
 
+        if (em_coupler) {
+          // Restart re-loads Vm + ionic state but not mechanics; trigger an
+          // initial active-tension advance so subsequent OnStep() is consistent.
+          em_coupler->OnStep(stepper.StepCount(), stepper.TimeMs());
+        }
         solve_wholebody_potentials();
       } else {
         // 冷启动：从静息态先做一次 bootstrap。
@@ -479,6 +532,9 @@ int main(int argc, char* argv[]) {
 
         const double t_prev_ms = stepper.TimeMs();
         stepper.Bootstrap();
+        if (em_coupler) {
+          em_coupler->OnStep(stepper.StepCount(), stepper.TimeMs());
+        }
         if (benchmark_probes) {
           update_activation_times(t_prev_ms, stepper.TimeMs(), sample_probe_vm());
         }
@@ -531,6 +587,9 @@ int main(int argc, char* argv[]) {
         using Clock = std::chrono::steady_clock;
         const double t_prev_ms = stepper.TimeMs();
         stepper.StepNoCorrection();
+        if (em_coupler) {
+          em_coupler->OnStep(stepper.StepCount(), stepper.TimeMs());
+        }
         if (benchmark_probes) {
           update_activation_times(t_prev_ms, stepper.TimeMs(), sample_probe_vm());
         }
