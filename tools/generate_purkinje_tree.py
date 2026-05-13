@@ -114,11 +114,30 @@ def generate(args):
 
         # Optional bifurcation.
         if rng.random() < args.p_bifurcate:
-            # Choose perpendicular axis for rotation.
-            up = (0.0, 0.0, 1.0)
-            axis = cross(d, up)
-            if all(c == 0 for c in axis):
-                axis = (0.0, 1.0, 0.0)
+            # Choose a perpendicular rotation axis with random orientation
+            # around d. Without randomisation the axis was always cross(d, +z)
+            # which collapses to (0, 1, 0) when d ~ ±x, trapping the entire
+            # tree in the x-z plane and giving zero y-spread. We construct a
+            # random unit vector in the plane perpendicular to d.
+            #   1. Build any vector not parallel to d.
+            #   2. Project out the d-component, normalise -> first basis e1.
+            #   3. Cross d x e1 -> second basis e2.
+            #   4. Mix e1, e2 with a random angle phi in [0, 2 pi) for the
+            #      rotation axis.
+            if abs(d[0]) > 0.9:
+                tmp = (0.0, 1.0, 0.0)
+            else:
+                tmp = (1.0, 0.0, 0.0)
+            dot_dt = d[0]*tmp[0] + d[1]*tmp[1] + d[2]*tmp[2]
+            e1 = (tmp[0] - dot_dt*d[0],
+                  tmp[1] - dot_dt*d[1],
+                  tmp[2] - dot_dt*d[2])
+            e1 = normalize(e1)
+            e2 = cross(d, e1)
+            phi = rng.uniform(0.0, 2.0 * math.pi)
+            axis = (math.cos(phi)*e1[0] + math.sin(phi)*e2[0],
+                    math.cos(phi)*e1[1] + math.sin(phi)*e2[1],
+                    math.cos(phi)*e1[2] + math.sin(phi)*e2[2])
             axis = normalize(axis)
             theta_l = angle_main_rad + rng.gauss(0.0, angle_sigma_rad)
             theta_r = -angle_main_rad + rng.gauss(0.0, angle_sigma_rad)
@@ -127,13 +146,24 @@ def generate(args):
             stack.append((new_idx, d_left, depth + 1))
             stack.append((new_idx, d_right, depth + 1))
         else:
-            # Continue growing same direction with small drift.
-            theta = rng.gauss(0.0, angle_sigma_rad)
-            up = (0.0, 0.0, 1.0)
-            axis = cross(d, up)
-            if all(c == 0 for c in axis):
-                axis = (0.0, 1.0, 0.0)
+            # Continue growing same direction with small drift in a random
+            # perpendicular direction (same logic as bifurcation axis).
+            if abs(d[0]) > 0.9:
+                tmp = (0.0, 1.0, 0.0)
+            else:
+                tmp = (1.0, 0.0, 0.0)
+            dot_dt = d[0]*tmp[0] + d[1]*tmp[1] + d[2]*tmp[2]
+            e1 = (tmp[0] - dot_dt*d[0],
+                  tmp[1] - dot_dt*d[1],
+                  tmp[2] - dot_dt*d[2])
+            e1 = normalize(e1)
+            e2 = cross(d, e1)
+            phi = rng.uniform(0.0, 2.0 * math.pi)
+            axis = (math.cos(phi)*e1[0] + math.sin(phi)*e2[0],
+                    math.cos(phi)*e1[1] + math.sin(phi)*e2[1],
+                    math.cos(phi)*e1[2] + math.sin(phi)*e2[2])
             axis = normalize(axis)
+            theta = rng.gauss(0.0, angle_sigma_rad)
             d_next = normalize(rotate_about_axis(d, axis, theta))
             stack.append((new_idx, d_next, depth + 1))
 
