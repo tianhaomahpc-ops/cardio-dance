@@ -18,7 +18,7 @@ sigma_n_mS_per_mm=0.0176
 
 dt_pde_ms=0.05
 dt_ode_ms=0.05
-t_end_ms=400.0
+t_end_ms=150.0
 
 # Apex stimulus 0..2 ms.
 stim_start_ms=0.0
@@ -36,7 +36,7 @@ ksp_rtol=1e-8
 
 # ---------- Electromechanical coupling ----------
 mechanics_enable=1
-mech_substep=50   # 50 * 0.05ms = 2.5 ms between mechanics solves
+mech_substep=20   # 20 * 0.05ms = 1 ms between mechanics solves
 
 # Holzapfel-Ogden 2009 (isochoric ground, full-F anisotropic).
 mech_ho_a=0.059
@@ -47,7 +47,7 @@ mech_ho_as=2.481
 mech_ho_bs=11.120
 mech_ho_afs=0.216
 mech_ho_bfs=11.436
-mech_ho_kappa=1000.0
+mech_ho_kappa=10000.0
 
 # Boundary attrs from generate_lv_ellipsoid_case:
 #   1 = base ring (clamped), 2 = endo, 3 = epi
@@ -55,10 +55,11 @@ mech_bdr_base_attr=1
 mech_bdr_endo_attr=2
 mech_bdr_epi_attr=3
 mech_endo_pressure_pa=0.0
-mech_peri_spring_k_kpa_per_mm=0.5
+mech_peri_spring_k_kpa_per_mm=2.0
 
-# Land 2017 active-tension defaults (human).
-land_Tref_kPa=120.0
+# Land 2017 active-tension (Tref reduced from 120 to keep large-Ta solves
+# numerically stable on this hex resolution).
+land_Tref_kPa=60.0
 land_Ca50_uM=0.805
 
 mech_snes_max_it=30
@@ -69,8 +70,8 @@ mech_ksp_max_it=500
 mech_ksp_rtol=1e-5
 mech_asm_overlap=1
 
-# Save a ParaView frame every 5 ms; 300 ms -> 60 frames.
-output_stride=100
+# Save a ParaView frame every 2.5 ms; 150 ms -> 60 frames.
+output_stride=50
 checkpoint_stride=0
 output_dir=output/lv_ellipsoid_em_video
 checkpoint_dir=checkpoint/lv_ellipsoid_em_video
