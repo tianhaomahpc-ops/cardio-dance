@@ -24,6 +24,8 @@ EMCoupler::EMCoupler(const SimulationConfig& cfg,
   *ta_gf_ = 0.0;
   lambda_gf_ = std::make_unique<mfem::ParGridFunction>(&assembler_.PFES());
   *lambda_gf_ = 1.0;
+  jdet_gf_ = std::make_unique<mfem::ParGridFunction>(&assembler_.PFES());
+  *jdet_gf_ = 1.0;
   mech_.SetActiveTension(*ta_gf_);
 }
 
@@ -55,6 +57,10 @@ bool EMCoupler::OnStep(int step_idx, double t_ms) {
   if (do_mech) {
     mech_.SetActiveTension(*ta_gf_);
     mech_.Solve();
+    // Refresh stretch / J grid functions for downstream output and Land
+    // length-dependent activation on the next step.
+    mech_.ComputeFiberStretch(*lambda_gf_);
+    mech_.ComputeJacobianDet(*jdet_gf_);
     // Rebuild K/A/B with deformation-modified diffusion tensor.
     assembler_.BuildSystemMatrices(cfg_.dt_pde_ms);
     linear_.InvalidatePetscOperator();

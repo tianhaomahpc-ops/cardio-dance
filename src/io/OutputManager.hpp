@@ -19,6 +19,14 @@ class OutputManager {
                 ExtracellularRecoverySolver* ue_solver = nullptr,
                 TorsoPotentialSolver* torso_solver = nullptr);
 
+  // Register optional mechanics fields (active tension, displacement,
+  // fiber stretch, J=detF) so they appear in the ParaView frames. The grid
+  // functions are bound by pointer; caller must keep them alive.
+  void RegisterMechanicsFields(const mfem::ParGridFunction* ta_kPa,
+                               const mfem::ParGridFunction* displacement,
+                               const mfem::ParGridFunction* lambda,
+                               const mfem::ParGridFunction* J_det);
+
   // Save one output frame at cycle/time.
   void Save(int step,
             double t_ms,

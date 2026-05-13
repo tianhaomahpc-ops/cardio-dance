@@ -63,6 +63,20 @@ OutputManager::OutputManager(const SimulationConfig& cfg,
   }
 }
 
+void OutputManager::RegisterMechanicsFields(
+    const mfem::ParGridFunction* ta_kPa,
+    const mfem::ParGridFunction* displacement,
+    const mfem::ParGridFunction* lambda,
+    const mfem::ParGridFunction* J_det) {
+  if (!heart_dc_) return;
+  if (ta_kPa) heart_dc_->RegisterField("Ta_kPa", const_cast<mfem::ParGridFunction*>(ta_kPa));
+  if (displacement)
+    heart_dc_->RegisterField("displacement",
+                             const_cast<mfem::ParGridFunction*>(displacement));
+  if (lambda) heart_dc_->RegisterField("lambda", const_cast<mfem::ParGridFunction*>(lambda));
+  if (J_det)  heart_dc_->RegisterField("Jdet",   const_cast<mfem::ParGridFunction*>(J_det));
+}
+
 void OutputManager::Save(int step,
                          double t_ms,
                          const mfem::Vector& iion_true,

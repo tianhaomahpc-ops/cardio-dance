@@ -28,32 +28,50 @@ bool HolzapfelOgdenModel::SampleFibers(mfem::Vector& f0, mfem::Vector& s0) const
   return true;
 }
 
-double HolzapfelOgdenModel::EvalW(const mfem::DenseMatrix& F) const {
+namespace {
+// MFEM's HyperelasticNLFIntegrator passes Jpt = grad_X u (the physical-space
+// displacement gradient), NOT the deformation gradient F. Add the identity
+// before delegating to HolzapfelOgdenMaterial which expects F.
+inline mfem::DenseMatrix MakeF(const mfem::DenseMatrix& Jpt) {
+  mfem::DenseMatrix F(Jpt);
+  const int dim = F.Size();
+  for (int k = 0; k < dim; ++k) F(k, k) += 1.0;
+  return F;
+}
+}  // namespace
+
+double HolzapfelOgdenModel::EvalW(const mfem::DenseMatrix& Jpt) const {
   mfem::Vector f0, s0;
   SampleFibers(f0, s0);
+  const mfem::DenseMatrix F = MakeF(Jpt);
   return HolzapfelOgdenMaterial::StrainEnergy(F, f0, s0, params_);
 }
 
-void HolzapfelOgdenModel::EvalP(const mfem::DenseMatrix& F,
+void HolzapfelOgdenModel::EvalP(const mfem::DenseMatrix& Jpt,
                                  mfem::DenseMatrix& P) const {
   mfem::Vector f0, s0;
   SampleFibers(f0, s0);
+  const mfem::DenseMatrix F = MakeF(Jpt);
   HolzapfelOgdenMaterial::PiolaPassive(F, f0, s0, params_, P);
 }
 
-void HolzapfelOgdenModel::AssembleH(const mfem::DenseMatrix& F,
+void HolzapfelOgdenModel::AssembleH(const mfem::DenseMatrix& Jpt,
                                      const mfem::DenseMatrix& DS,
                                      const double weight,
                                      mfem::DenseMatrix& A) const {
   mfem::Vector f0, s0;
   SampleFibers(f0, s0);
-  const int dim = F.Size();
+  const int dim = Jpt.Size();
   const int dof = DS.Height();
+  const mfem::DenseMatrix F = MakeF(Jpt);
 
   mfem::DenseMatrix C(9);
   HolzapfelOgdenMaterial::Tangent(F, f0, s0, params_, C);
 
-  // A((k_a)*dim + i, (k_b)*dim + j) += weight * sum_{m,n} DS(k_a,m) * dP_{i,m}/dF_{j,n} * DS(k_b,n).
+  // vec_fes_ uses byNODES, so the element vector is laid out as
+  // [u_x_0..u_x_{dof-1}, u_y_0..u_y_{dof-1}, u_z_*]. The matching elmat row
+  // for (component i, node ka) is row = i*dof + ka.
+  // contrib(i*dof+ka, j*dof+kb) += weight * sum_{m,n} DS(ka,m) * dP_{i,m}/dF_{j,n} * DS(kb,n).
   for (int ka = 0; ka < dof; ++ka) {
     for (int kb = 0; kb < dof; ++kb) {
       for (int i = 0; i < dim; ++i) {
@@ -64,7 +82,7 @@ void HolzapfelOgdenModel::AssembleH(const mfem::DenseMatrix& F,
               acc += DS(ka, m) * C(i * 3 + m, j * 3 + n) * DS(kb, n);
             }
           }
-          A(ka * dim + i, kb * dim + j) += weight * acc;
+          A(i * dof + ka, j * dof + kb) += weight * acc;
         }
       }
     }

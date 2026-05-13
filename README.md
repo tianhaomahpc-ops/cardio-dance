@@ -267,6 +267,17 @@ Boundary attributes produced by the generator:
 - `2`: endocardium (inner surface)
 - `3`: epicardium (outer surface)
 
+End-to-end pipeline (mesh -> EM solve -> MP4):
+
+```bash
+NP=4 ./tools/run_lv_em_video.sh
+```
+
+This produces `output/lv_ellipsoid_em_video/lv_em.mp4`, a side-by-side
+ParaView render of Vm (left, mV) and active tension Ta (right, kPa) on the
+deforming LV through the action potential + contraction. Requires
+`python3-vtk9 python3-numpy ffmpeg`.
+
 Detailed workflow and literature-comparison checklist:
 
 - `docs/wholebody_workflow.md`

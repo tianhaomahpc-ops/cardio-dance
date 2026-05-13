@@ -1,5 +1,6 @@
 #include "mechanics/MechanicsSolver.hpp"
 
+#include <cmath>
 #include <stdexcept>
 
 #include "mechanics/ActiveStressCoefficient.hpp"
@@ -34,24 +35,32 @@ class ActiveTensionHyperelasticModel : public mfem::HyperelasticModel {
     return true;
   }
 
-  double EvalW(const mfem::DenseMatrix& F) const override {
+  // Note: MFEM's HyperelasticNLFIntegrator passes Jpt = grad_X u (not F).
+  // We add the identity before computing the active stress so the response
+  // at the reference configuration (u = 0) is T_a * f0 (x) f0 -- nonzero.
+  double EvalW(const mfem::DenseMatrix& Jpt) const override {
     double Ta;
     mfem::Vector f0;
-    if (!EvalAtIP(Ta, f0, F.Size())) return 0.0;
-    mfem::Vector Ff0(F.Size());
+    if (!EvalAtIP(Ta, f0, Jpt.Size())) return 0.0;
+    const int dim = Jpt.Size();
+    mfem::DenseMatrix F(Jpt);
+    for (int k = 0; k < dim; ++k) F(k, k) += 1.0;
+    mfem::Vector Ff0(dim);
     F.Mult(f0, Ff0);
     double dot = 0.0;
-    for (int i = 0; i < f0.Size(); ++i) dot += Ff0(i) * f0(i);
+    for (int i = 0; i < dim; ++i) dot += Ff0(i) * f0(i);
     return Ta * (dot - 1.0);
   }
 
-  void EvalP(const mfem::DenseMatrix& F, mfem::DenseMatrix& P) const override {
-    const int dim = F.Size();
+  void EvalP(const mfem::DenseMatrix& Jpt, mfem::DenseMatrix& P) const override {
+    const int dim = Jpt.Size();
     P.SetSize(dim);
     P = 0.0;
     double Ta;
     mfem::Vector f0;
     if (!EvalAtIP(Ta, f0, dim)) return;
+    mfem::DenseMatrix F(Jpt);
+    for (int k = 0; k < dim; ++k) F(k, k) += 1.0;
     mfem::Vector Ff0(dim);
     F.Mult(f0, Ff0);
     for (int i = 0; i < dim; ++i)
@@ -59,37 +68,32 @@ class ActiveTensionHyperelasticModel : public mfem::HyperelasticModel {
         P(i, j) = Ta * Ff0(i) * f0(j);
   }
 
-  void AssembleH(const mfem::DenseMatrix& F,
+  void AssembleH(const mfem::DenseMatrix& Jpt,
                  const mfem::DenseMatrix& DS,
                  const double weight,
                  mfem::DenseMatrix& A) const override {
-    const int dim = F.Size();
+    const int dim = Jpt.Size();
     const int dof = DS.Height();
     double Ta;
     mfem::Vector f0;
     if (!EvalAtIP(Ta, f0, dim)) return;
 
-    // A((k_a)*dim+i, (k_b)*dim+j) += w * DS(k_a,m) * (Ta delta_{i,j_?} ...) * DS(k_b,n).
-    // dP_{ai}/dF_{bj} = T_a * delta_{a,b} f0_j f0_i
-    // sum over m: DS(k_a, m) * dP_{i,m}/dF_{j,n} * DS(k_b, n)
-    //          = T_a * sum_m DS(k_a,m) * delta_{i,j} * f0_m * f0_? ...
-    // Cleaner: pre-compute c_{i,j,?,?} = T_a delta_{i,j} f0_?(j) f0_?(i)? Skip;
-    // use explicit 4-index loop.
+    // dP_{a,i}/dF_{b,j} = T_a delta_{a,b} f0_i f0_j  (with F = I + grad u, dF = d(grad u)).
+    // sum_{m,n} DS(ka,m) * dP_{d_a,m}/dF_{d_b,n} * DS(kb,n)
+    //        = T_a delta_{d_a,d_b} * (sum_m DS(ka,m) f0_m) * (sum_n DS(kb,n) f0_n)
+    // vec_fes_ is byNODES: linear index = component*dof + node.
+    mfem::Vector df_ka(dof), df_kb(dof);
     for (int ka = 0; ka < dof; ++ka) {
-      for (int kb = 0; kb < dof; ++kb) {
-        const double w_kakb_mn_sum = [&]() {
-          double acc = 0.0;
-          for (int m = 0; m < dim; ++m) {
-            for (int n = 0; n < dim; ++n) {
-              acc += DS(ka, m) * f0(m) * DS(kb, n) * f0(n);
-            }
-          }
-          return acc;
-        }();
-        for (int i = 0; i < dim; ++i) {
-          // dP_{ai}/dF_{aj} = T_a f0_j f0_i  (only diagonal in 'a').
-          // Contracted: sum_{m,n} DS(ka,m) DS(kb,n) f0(m) f0(n) * Ta (only when i==j).
-          A(ka * dim + i, kb * dim + i) += weight * Ta * w_kakb_mn_sum;
+      double s = 0.0;
+      for (int m = 0; m < dim; ++m) s += DS(ka, m) * f0(m);
+      df_ka(ka) = s;
+    }
+    for (int da = 0; da < dim; ++da) {
+      for (int ka = 0; ka < dof; ++ka) {
+        const double row_term = weight * Ta * df_ka(ka);
+        if (row_term == 0.0) continue;
+        for (int kb = 0; kb < dof; ++kb) {
+          A(da * dof + ka, da * dof + kb) += row_term * df_ka(kb);
         }
       }
     }
@@ -99,6 +103,163 @@ class ActiveTensionHyperelasticModel : public mfem::HyperelasticModel {
   const mfem::ParGridFunction& ta_gf_;
   mfem::VectorCoefficient& f0_coeff_;
   mutable mfem::GridFunctionCoefficient ta_coeff_;
+};
+
+// lambda(x) = || (I + grad u(x)) f0(x) || at the current integration point.
+class FiberStretchCoefficient : public mfem::Coefficient {
+ public:
+  FiberStretchCoefficient(const mfem::ParGridFunction& u,
+                          mfem::VectorCoefficient& f0)
+      : u_(u), f0_(f0) {}
+
+  double Eval(mfem::ElementTransformation& T,
+              const mfem::IntegrationPoint& ip) override {
+    const int dim = T.GetSpaceDim();
+    T.SetIntPoint(&ip);
+    mfem::DenseMatrix grad_u(dim);
+    u_.GetVectorGradient(T, grad_u);
+    mfem::DenseMatrix F(grad_u);
+    for (int k = 0; k < dim; ++k) F(k, k) += 1.0;
+    mfem::Vector f0(dim);
+    f0_.Eval(f0, T, ip);
+    const double nf = f0.Norml2();
+    if (nf > 1e-14) f0 /= nf;
+    mfem::Vector Ff0(dim);
+    F.Mult(f0, Ff0);
+    return Ff0.Norml2();
+  }
+
+ private:
+  const mfem::ParGridFunction& u_;
+  mfem::VectorCoefficient& f0_;
+};
+
+// J(x) = det(I + grad u(x)) at the current integration point.
+class JacobianDetCoefficient : public mfem::Coefficient {
+ public:
+  explicit JacobianDetCoefficient(const mfem::ParGridFunction& u) : u_(u) {}
+
+  double Eval(mfem::ElementTransformation& T,
+              const mfem::IntegrationPoint& ip) override {
+    const int dim = T.GetSpaceDim();
+    T.SetIntPoint(&ip);
+    mfem::DenseMatrix grad_u(dim);
+    u_.GetVectorGradient(T, grad_u);
+    mfem::DenseMatrix F(grad_u);
+    for (int k = 0; k < dim; ++k) F(k, k) += 1.0;
+    return F.Det();
+  }
+
+ private:
+  const mfem::ParGridFunction& u_;
+};
+
+// Pericardial normal Robin spring: traction t = -k (u . n) n on bdr_epi_attr.
+// Contributes (residual) R_v = integral k (u . n)(v . n) dS, and
+// (Jacobian)            J = integral k (n outer n)(phi_j phi_i) dS.
+// Both forms are linear in u, so Jacobian is constant in u.
+class NormalSpringBdrNLFI : public mfem::NonlinearFormIntegrator {
+ public:
+  explicit NormalSpringBdrNLFI(double k_kpa_per_mm) : k_(k_kpa_per_mm) {}
+
+  void AssembleFaceVector(const mfem::FiniteElement& el1,
+                          const mfem::FiniteElement& /*el2*/,
+                          mfem::FaceElementTransformations& Tr,
+                          const mfem::Vector& elfun,
+                          mfem::Vector& elvect) override {
+    const int dim = Tr.GetSpaceDim();
+    const int nd = el1.GetDof();
+    elvect.SetSize(elfun.Size());
+    elvect = 0.0;
+
+    // byNODES vector layout: u[d*nd + i] is component d at node i.
+    mfem::DenseMatrix u_mat(elfun.GetData(), nd, dim);
+    mfem::DenseMatrix r_mat(elvect.GetData(), nd, dim);
+
+    mfem::Vector shape(nd);
+    mfem::Vector u_ip(dim);
+    mfem::Vector n_ref(dim);
+
+    const int q_order = 2 * el1.GetOrder();
+    const mfem::IntegrationRule* ir =
+        &mfem::IntRules.Get(Tr.GetGeometryType(), q_order);
+
+    for (int q = 0; q < ir->GetNPoints(); ++q) {
+      const mfem::IntegrationPoint& ip = ir->IntPoint(q);
+      Tr.SetAllIntPoints(&ip);
+      const mfem::IntegrationPoint& eip1 = Tr.GetElement1IntPoint();
+      el1.CalcShape(eip1, shape);
+
+      // CalcOrtho returns the reference outward normal scaled by |J_face|.
+      mfem::CalcOrtho(Tr.Jacobian(), n_ref);
+      const double nlen = n_ref.Norml2();
+      if (nlen < 1e-14) continue;
+
+      // u(ip) at byNODES: u_ip[d] = sum_i shape[i] * u_mat(i, d)
+      u_mat.MultTranspose(shape, u_ip);
+
+      double un = 0.0;
+      for (int d = 0; d < dim; ++d) un += u_ip(d) * n_ref(d);  // u . (|J_face| n_hat)
+      // Surface measure = ip.weight * |J_face| = ip.weight * nlen.
+      // contribution r_jd = w_phys * k * (u . n_hat) * shape_j * n_hat_d
+      //                   = ip.weight * nlen * k * (un / nlen) * shape_j * n_ref_d / nlen
+      //                   = ip.weight * k * un * shape_j * n_ref_d / nlen
+      const double scale = ip.weight * k_ * un / nlen;
+      for (int d = 0; d < dim; ++d) {
+        const double common = scale * n_ref(d);
+        for (int j = 0; j < nd; ++j) {
+          r_mat(j, d) += common * shape(j);
+        }
+      }
+    }
+  }
+
+  void AssembleFaceGrad(const mfem::FiniteElement& el1,
+                        const mfem::FiniteElement& /*el2*/,
+                        mfem::FaceElementTransformations& Tr,
+                        const mfem::Vector& /*elfun*/,
+                        mfem::DenseMatrix& elmat) override {
+    const int dim = Tr.GetSpaceDim();
+    const int nd = el1.GetDof();
+    elmat.SetSize(nd * dim);
+    elmat = 0.0;
+
+    mfem::Vector shape(nd);
+    mfem::Vector n_ref(dim);
+
+    const int q_order = 2 * el1.GetOrder();
+    const mfem::IntegrationRule* ir =
+        &mfem::IntRules.Get(Tr.GetGeometryType(), q_order);
+
+    for (int q = 0; q < ir->GetNPoints(); ++q) {
+      const mfem::IntegrationPoint& ip = ir->IntPoint(q);
+      Tr.SetAllIntPoints(&ip);
+      const mfem::IntegrationPoint& eip1 = Tr.GetElement1IntPoint();
+      el1.CalcShape(eip1, shape);
+
+      mfem::CalcOrtho(Tr.Jacobian(), n_ref);
+      const double nlen = n_ref.Norml2();
+      if (nlen < 1e-14) continue;
+      const double w = ip.weight * k_ / nlen;  // see AssembleFaceVector derivation.
+
+      // elmat[(d*nd + j)][(e*nd + i)] += w * n_d * n_e * shape_j * shape_i
+      for (int d = 0; d < dim; ++d) {
+        for (int e = 0; e < dim; ++e) {
+          const double nde = n_ref(d) * n_ref(e);
+          if (std::abs(nde) < 1e-30) continue;
+          for (int j = 0; j < nd; ++j) {
+            const double sj = shape(j);
+            for (int i = 0; i < nd; ++i) {
+              elmat(d * nd + j, e * nd + i) += w * nde * sj * shape(i);
+            }
+          }
+        }
+      }
+    }
+  }
+
+ private:
+  double k_;
 };
 
 }  // namespace
@@ -146,6 +307,20 @@ void MechanicsSolver::BuildSpaceAndForm() {
   nlform_ = std::make_unique<mfem::ParNonlinearForm>(vec_fes_.get());
   // Passive HO hyperelastic integrator.
   nlform_->AddDomainIntegrator(new mfem::HyperelasticNLFIntegrator(ho_model_.get()));
+
+  // Pericardial normal Robin spring on the epicardium.
+  if (cfg_.mech_peri_spring_k_kpa_per_mm > 0.0 &&
+      cfg_.mech_bdr_epi_attr >= 1 && pmesh->bdr_attributes.Size() > 0) {
+    const int max_attr = pmesh->bdr_attributes.Max();
+    if (cfg_.mech_bdr_epi_attr <= max_attr) {
+      epi_marker_.SetSize(max_attr);
+      epi_marker_ = 0;
+      epi_marker_[cfg_.mech_bdr_epi_attr - 1] = 1;
+      nlform_->AddBdrFaceIntegrator(
+          new NormalSpringBdrNLFI(cfg_.mech_peri_spring_k_kpa_per_mm),
+          epi_marker_);
+    }
+  }
 }
 
 void MechanicsSolver::IdentifyEssentialDofs() {
@@ -184,19 +359,22 @@ void MechanicsSolver::SetEndocardialPressurePa(double p_pa) {
 
 void MechanicsSolver::EnsureSolver() {
   if (newton_) return;
-#ifdef MFEM_USE_PETSC
-  auto* sn = new mfem::PetscNonlinearSolver(comm_, *nlform_, "mech_");
-  sn->SetMaxIter(cfg_.mech_snes_max_it);
-  sn->SetRelTol(cfg_.mech_snes_rtol);
-  sn->SetAbsTol(cfg_.mech_snes_atol);
-  sn->SetPrintLevel(cfg_.mech_snes_print_level);
-  newton_.reset(sn);
-#else
+  // MFEM Newton + HypreGMRES + BoomerAMG. PetscNonlinearSolver-wrapped SNES
+  // is currently disabled because in this build/topology it exits after
+  // iteration 0 without iterating; the MFEM Newton path converges robustly
+  // in ~15 iters and is used regardless of the global use_petsc switch.
+  auto* amg = new mfem::HypreBoomerAMG();
+  amg->SetPrintLevel(0);
+  amg->SetSystemsOptions(ep_pfes_.GetParMesh()->Dimension());
+  prec_.reset(amg);
+
   auto* gmres = new mfem::HypreGMRES(comm_);
   gmres->SetMaxIter(cfg_.mech_ksp_max_it);
   gmres->SetTol(cfg_.mech_ksp_rtol);
   gmres->SetKDim(60);
+  gmres->SetPreconditioner(*amg);
   ksp_.reset(gmres);
+
   auto* nw = new mfem::NewtonSolver(comm_);
   nw->SetOperator(*nlform_);
   nw->SetSolver(*ksp_);
@@ -205,7 +383,6 @@ void MechanicsSolver::EnsureSolver() {
   nw->SetAbsTol(cfg_.mech_snes_atol);
   nw->SetPrintLevel(cfg_.mech_snes_print_level);
   newton_.reset(nw);
-#endif
 }
 
 int MechanicsSolver::Solve() {
@@ -221,23 +398,29 @@ int MechanicsSolver::Solve() {
   newton_->Mult(zero, x_true);
 
   u_->SetFromTrueDofs(x_true);
-  return cfg_.mech_snes_max_it;  // SNES iterations are accessible via PETSc API; placeholder
+
+  // Report real iteration count from the underlying solver.
+#ifdef MFEM_USE_PETSC
+  if (auto* sn = dynamic_cast<mfem::PetscNonlinearSolver*>(newton_.get())) {
+    return sn->GetNumIterations();
+  }
+#endif
+  if (auto* nw = dynamic_cast<mfem::IterativeSolver*>(newton_.get())) {
+    return nw->GetNumIterations();
+  }
+  return -1;
 }
 
 void MechanicsSolver::ComputeFiberStretch(mfem::ParGridFunction& lambda_gf) const {
   lambda_gf.SetSpace(&ep_pfes_);
-  lambda_gf = 1.0;
-  // Per-true-DOF nodal stretch: lambda = || (I + grad u) f0 ||.
-  // Approximate by averaging element gradients at nodes (P1).
-  mfem::ParGridFunction grad_norm(&ep_pfes_);
-  grad_norm = 0.0;
-  // For initial wiring we leave nodal averaging to a follow-up; return 1.0.
+  FiberStretchCoefficient stretch(*u_, f0_coeff_);
+  lambda_gf.ProjectCoefficient(stretch);
 }
 
 void MechanicsSolver::ComputeJacobianDet(mfem::ParGridFunction& J_gf) const {
   J_gf.SetSpace(&ep_pfes_);
-  J_gf = 1.0;
-  // Same note as ComputeFiberStretch.
+  JacobianDetCoefficient jdet(*u_);
+  J_gf.ProjectCoefficient(jdet);
 }
 
 }  // namespace mono

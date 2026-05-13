@@ -37,6 +37,10 @@ class EMCoupler {
 
   // Active tension grid function exposed for the MechanicsSolver / output.
   mfem::ParGridFunction& ActiveTension() { return *ta_gf_; }
+  // Fiber stretch lambda at nodes; refreshed inside OnStep.
+  mfem::ParGridFunction& Lambda() { return *lambda_gf_; }
+  // J = det F at nodes; refreshed inside OnStep.
+  mfem::ParGridFunction& JacobianDet() { return *jdet_gf_; }
 
  private:
   const SimulationConfig& cfg_;
@@ -48,6 +52,7 @@ class EMCoupler {
 
   std::unique_ptr<mfem::ParGridFunction> ta_gf_;
   std::unique_ptr<mfem::ParGridFunction> lambda_gf_;
+  std::unique_ptr<mfem::ParGridFunction> jdet_gf_;
   mfem::Vector cai_buf_;
   mfem::Vector ta_buf_;
   mfem::Vector lambda_buf_;

@@ -209,6 +209,12 @@ int main(int argc, char* argv[]) {
       }
 
       mono::OutputManager output(cfg, assembler, ue_solver.get(), torso_solver.get());
+      if (em_coupler && mech_solver) {
+        output.RegisterMechanicsFields(&em_coupler->ActiveTension(),
+                                       &mech_solver->Displacement(),
+                                       &em_coupler->Lambda(),
+                                       &em_coupler->JacobianDet());
+      }
       mono::CheckpointIO checkpoint(cfg, MPI_COMM_WORLD);
       const bool output_enabled = (cfg.output_stride > 0);
       const bool checkpoint_enabled = (cfg.checkpoint_stride > 0);

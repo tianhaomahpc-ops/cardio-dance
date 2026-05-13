@@ -82,6 +82,9 @@ class MechanicsSolver {
 
   // Essential dofs (base clamp).
   mfem::Array<int> ess_tdofs_;
+  // Boundary-attribute marker for the pericardial Robin spring (epi face);
+  // owned here because mfem::ParNonlinearForm stores it by reference.
+  mfem::Array<int> epi_marker_;
 
   // PETSc-based Newton-Krylov; allocated lazily on first Solve().
   std::unique_ptr<mfem::Solver> newton_;
