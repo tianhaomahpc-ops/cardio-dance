@@ -49,7 +49,7 @@ purkinje_network_path=config/half_ellipsoid_purkinje.network
 purkinje_cable_subdivision=1
 purkinje_dt_ms=0.005
 purkinje_cm_uF_per_mm2=0.01
-purkinje_edge_g_mS_per_mm=0.05
+purkinje_edge_g_mS_per_mm=0.20
 purkinje_v_rest_mv=-90.0
 
 purkinje_stim_nodes=0,1,2
