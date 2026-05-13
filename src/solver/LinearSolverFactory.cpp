@@ -62,10 +62,10 @@ std::unique_ptr<mfem::PetscParMatrix> BuildPetscAijFromHypre(const mfem::HyprePa
 
   const int* d_i = diag.HostReadI();
   const int* d_j = diag.HostReadJ();
-  const mfem::real_t* d_data = diag.HostReadData();
+  const double* d_data = diag.HostReadData();
   const int* o_i = offd.HostReadI();
   const int* o_j = offd.HostReadJ();
-  const mfem::real_t* o_data = offd.HostReadData();
+  const double* o_data = offd.HostReadData();
   const int offd_width = offd.Width();
 
   std::vector<PetscInt> d_nnz(local_rows, 0);

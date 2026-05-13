@@ -185,7 +185,7 @@ void MechanicsSolver::SetEndocardialPressurePa(double p_pa) {
 void MechanicsSolver::EnsureSolver() {
   if (newton_) return;
 #ifdef MFEM_USE_PETSC
-  auto* sn = new mfem::PetscNonlinearSolver(comm_, *nlform_, "-mech_");
+  auto* sn = new mfem::PetscNonlinearSolver(comm_, *nlform_, "mech_");
   sn->SetMaxIter(cfg_.mech_snes_max_it);
   sn->SetRelTol(cfg_.mech_snes_rtol);
   sn->SetAbsTol(cfg_.mech_snes_atol);
