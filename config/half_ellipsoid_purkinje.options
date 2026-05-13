@@ -52,6 +52,9 @@ purkinje_cm_uF_per_mm2=0.01
 purkinje_edge_g_mS_per_mm=0.20
 purkinje_v_rest_mv=-90.0
 
+# Three root nodes (apex, anterior, posterior). With LIFO stack growth,
+# indices 0, 1, 2 are the three roots themselves (not connected to each
+# other in the cable; they only meet through the heart via PVJ).
 purkinje_stim_nodes=0,1,2
 purkinje_stim_start_ms=0.0
 purkinje_stim_end_ms=1.0

@@ -83,17 +83,40 @@ def generate(args):
     nodes: list[Node] = []
     edges: list[tuple[int, int]] = []
 
-    root = parse_vec(args.root)
-    init_dir = normalize(parse_vec(args.direction))
+    # Multiple roots are supported by repeating --root and --direction;
+    # each pair starts an independent subtree that grows from its root.
+    # Subtree node indices are concatenated into a single .network file
+    # (no edges between subtrees -- they only meet at the heart side
+    # through PVJ injection).
+    roots_raw = args.root if isinstance(args.root, list) else [args.root]
+    if not args.direction:
+        dirs_raw = ["1,0,0"] * len(roots_raw)
+    elif isinstance(args.direction, list):
+        dirs_raw = args.direction
+    else:
+        dirs_raw = [args.direction]
+    if len(dirs_raw) == 1 and len(roots_raw) > 1:
+        dirs_raw = dirs_raw * len(roots_raw)
+    if len(roots_raw) != len(dirs_raw):
+        raise ValueError(
+            f"--root count {len(roots_raw)} != --direction count {len(dirs_raw)}"
+        )
+    root_indices = []  # for caller / stim wiring -- prints node index of each root.
     bbox_min = parse_vec(args.bbox_min) if args.bbox_min else None
     bbox_max = parse_vec(args.bbox_max) if args.bbox_max else None
 
-    nodes.append(Node(*root))
     angle_main_rad = math.radians(args.bifurcation_angle_deg)
     angle_sigma_rad = math.radians(args.angle_sigma)
 
-    # Stack: (parent_idx, direction, depth)
-    stack = [(0, init_dir, 0)]
+    # Stack accumulates work across all subtrees so they share one rng stream;
+    # we push each root's initial work-item up front.
+    stack = []
+    for root_str, dir_str in zip(roots_raw, dirs_raw):
+        root = parse_vec(root_str)
+        init_dir = normalize(parse_vec(dir_str))
+        nodes.append(Node(*root))
+        root_indices.append(len(nodes) - 1)
+        stack.append((len(nodes) - 1, init_dir, 0))
 
     while stack:
         parent_idx, d, depth = stack.pop()
@@ -178,14 +201,17 @@ def generate(args):
         if out_count[i] == 0:
             n.terminal = True
 
-    return nodes, edges
+    return nodes, edges, root_indices
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--root", required=True, help="x,y,z root coordinate")
-    p.add_argument("--direction", default="1,0,0", help="initial growth direction")
+    p.add_argument("--root", required=True, action="append",
+                   help="x,y,z root coordinate. Repeat for multiple roots.")
+    p.add_argument("--direction", action="append",
+                   help="initial growth direction. Repeat to match --root, or "
+                        "supply once and it will be reused for every root.")
     p.add_argument("--length", type=float, default=2.5, help="segment length (mm)")
     p.add_argument("--max_depth", type=int, default=8)
     p.add_argument("--bifurcation_angle_deg", type=float, default=30.0)
@@ -197,7 +223,7 @@ def main():
     p.add_argument("--out", required=True, help="output .network path")
     args = p.parse_args()
 
-    nodes, edges = generate(args)
+    nodes, edges, root_indices = generate(args)
     with open(args.out, "w") as f:
         f.write(f"{len(nodes)} {len(edges)}\n")
         for n in nodes:
@@ -207,6 +233,12 @@ def main():
     n_term = sum(1 for n in nodes if n.terminal)
     print(f"wrote {args.out}: {len(nodes)} nodes ({n_term} terminals), {len(edges)} edges",
           file=sys.stderr)
+    if len(root_indices) > 1:
+        print(
+            f"  root node indices (use these in purkinje_stim_nodes): "
+            f"{','.join(str(i) for i in root_indices)}",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":
