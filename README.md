@@ -298,11 +298,26 @@ Three reference renders live in `docs/media/`:
   entire 1255-node tree in ~5-10 ms and fires the myocardium through 530
   mapped PVJs (each smeared over a 3 mm ball). 89% of the LV is
   activated by t = 35 ms. The clip covers t = 0..35 ms before the H-O
-  solver tips into a fold on this geometry. Reproducing the full 150 ms
-  EM cycle is the next step: either drop `land_Tref_kPa` further,
-  stagger the Purkinje root firing, or implement the endocardial
-  pressure-follower load to provide the bulk-restoring force the
-  Robin spring on epi alone can't supply.
+  solver tips into a fold on this geometry.
+
+  Reaching the full 150 ms EM cycle was attempted by halving the active
+  reference tension (`config/lv_ellipsoid_em_stewart_tref30.options`,
+  `land_Tref_kPa=30`). Diagnostic finding: Newton produces `||r|| = NaN`
+  on the very first mechanics call (t = 2.5 ms) under broad Purkinje
+  activation, regardless of whether `land_Tref_kPa` is 60 or 30. The
+  Tref=60 video survived to t = 35 ms only because Newton's
+  no-convergence return path emits a finite (but wrong) displacement
+  that drifts slowly. With `land_Tref_kPa=0` the same setup runs
+  cleanly through t = 10 ms (no Newton failures, peak Vm +28 mV), so
+  the passive H-O + Stewart EP loop is sound. The bottleneck is the
+  Newton + HypreGMRES + BoomerAMG path becoming non-robust to any
+  non-zero active stress on this 50x24x4 hex with broad activation.
+  Recommended follow-ups (in order of expected payoff): line-search
+  with backtracking inside `MechanicsSolver`, drop `mech_substep` from
+  50 to 10 to advance the Newton initial guess in finer increments,
+  or implement the endocardial pressure-follower load on
+  `bdr_endo_attr` (currently `mech_endo_pressure_pa=0`) so the wall
+  has a balancing inward Cauchy load.
 
 Detailed workflow and literature-comparison checklist:
 
