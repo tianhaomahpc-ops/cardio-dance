@@ -35,7 +35,7 @@ sigma_n_mS_per_mm=0.0176
 # Time
 dt_pde_ms=0.05
 dt_ode_ms=0.05
-t_end_ms=100.0
+t_end_ms=400.0
 
 # No direct myocardial stim
 stim_start_ms=0.0
