@@ -9,15 +9,18 @@
 #   ./build/finalize_half_ellipsoid_mesh --emit-fibers
 # Regenerate Purkinje (3 LBB-style base-side fascicle entries growing toward apex,
 # matching Durrer 1970 earliest-activation pattern: high-anterior paraseptal,
-# mid-septal, high-posterior paraseptal):
+# mid-septal, high-posterior paraseptal). The cavity_ellipsoid clip keeps all
+# nodes inside the LV endocardium (inner ellipsoid is ~30x15x15 in mesh; we
+# use 28x13x13 for a 2 mm safety margin):
 #   python3 tools/generate_purkinje_tree.py \
 #     --root=5,8,0   --direction=1,-0.3,0 \
 #     --root=10,0,5  --direction=1,0,-0.3 \
 #     --root=5,-8,0  --direction=1,0.3,0 \
-#     --length 2.5 --max_depth 12 --p_bifurcate 0.92 \
+#     --length 2.5 --max_depth 17 --p_bifurcate 0.94 \
 #     --bifurcation_angle_deg 22 --angle_sigma 18 \
-#     --bbox_min=-2,-14,-14 --bbox_max=33,14,14 --seed 17 \
-#     --out config/half_ellipsoid_purkinje.network
+#     --bbox_min=0,-14,-14 --bbox_max=29,14,14 \
+#     --cavity_ellipsoid_center=0,0,0 --cavity_ellipsoid_radii=28,13,13 \
+#     --seed 17 --out config/half_ellipsoid_purkinje.network
 
 mesh_path=benchmarks/half_ellipsoid/heart.mesh
 use_fiber_gf=1
@@ -49,7 +52,8 @@ stim_zmin_mm=0.0
 stim_zmax_mm=-1.0
 stim_fraction=0.0
 
-# Purkinje: 4207 nodes, 2135 terminals, base-side LBB-style roots.
+# Purkinje: 1829 nodes, 1006 terminals, base-side LBB-style roots, clipped
+# to LV endocardial cavity (28x13x13 ellipsoid).
 enable_purkinje=1
 purkinje_network_path=config/half_ellipsoid_purkinje.network
 purkinje_cable_subdivision=1

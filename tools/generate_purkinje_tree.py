@@ -77,6 +77,17 @@ def in_box(p, bbox_min, bbox_max):
     return all(bbox_min[i] <= p[i] <= bbox_max[i] for i in range(3))
 
 
+def in_ellipsoid(p, center, radii):
+    """True if p is inside the axis-aligned ellipsoid (center, radii)."""
+    if center is None or radii is None:
+        return True
+    return sum(((p[i] - center[i]) / radii[i]) ** 2 for i in range(3)) <= 1.0
+
+
+def in_volume(p, bbox_min, bbox_max, ell_center, ell_radii):
+    return in_box(p, bbox_min, bbox_max) and in_ellipsoid(p, ell_center, ell_radii)
+
+
 def generate(args):
     rng = random.Random(args.seed)
 
@@ -104,6 +115,8 @@ def generate(args):
     root_indices = []  # for caller / stim wiring -- prints node index of each root.
     bbox_min = parse_vec(args.bbox_min) if args.bbox_min else None
     bbox_max = parse_vec(args.bbox_max) if args.bbox_max else None
+    ell_center = parse_vec(args.cavity_ellipsoid_center) if args.cavity_ellipsoid_center else None
+    ell_radii = parse_vec(args.cavity_ellipsoid_radii) if args.cavity_ellipsoid_radii else None
 
     angle_main_rad = math.radians(args.bifurcation_angle_deg)
     angle_sigma_rad = math.radians(args.angle_sigma)
@@ -128,7 +141,7 @@ def generate(args):
         seg = max(seg, 0.5 * args.length)
         new_pos = tuple(nodes[parent_idx].__dict__[c] + d[i] * seg
                         for i, c in enumerate(("x", "y", "z")))
-        if not in_box(new_pos, bbox_min, bbox_max):
+        if not in_volume(new_pos, bbox_min, bbox_max, ell_center, ell_radii):
             nodes[parent_idx].terminal = True
             continue
         nodes.append(Node(*new_pos))
@@ -219,6 +232,11 @@ def main():
     p.add_argument("--p_bifurcate", type=float, default=0.7)
     p.add_argument("--bbox_min", default=None, help="x,y,z bounding-box min in mm")
     p.add_argument("--bbox_max", default=None, help="x,y,z bounding-box max in mm")
+    p.add_argument("--cavity_ellipsoid_center", default=None,
+                   help="cx,cy,cz center of axis-aligned ellipsoid cavity clip in mm")
+    p.add_argument("--cavity_ellipsoid_radii", default=None,
+                   help="a,b,c semi-axes of axis-aligned ellipsoid cavity clip in mm; "
+                        "growth stops at terminal when (x-cx)^2/a^2 + ... > 1")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out", required=True, help="output .network path")
     args = p.parse_args()
