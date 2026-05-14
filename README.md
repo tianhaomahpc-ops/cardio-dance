@@ -278,13 +278,27 @@ ParaView render of Vm (left, mV) and active tension Ta (right, kPa) on the
 deforming LV through the action potential + contraction. Requires
 `python3-vtk9 python3-numpy ffmpeg`.
 
-A reference render of the 150 ms run lives at `docs/media/lv_em_150ms.mp4`:
+Two reference renders live in `docs/media/`:
 
-- Action potential propagates from the apex stimulus, peak Vm ~ +32 mV
-- Land 2017 active tension peaks at ~34 kPa around t = 50 ms
-- Apex region contracts radially; max displacement ~ 0.62 mm (warp = 5x in
-  the rendered video to make it visible against the 17 mm short axis)
-- J = det F stays in [0.97, 1.02] throughout the cycle
+- `lv_em_150ms.mp4` -- 24x12x3 hex, single apex stim ball, full EM
+  (TT06 + Land 2017 + H-O). Mechanics works (max displacement ~ 0.62 mm,
+  J in [0.97, 1.02]) but the EP wave only fires the apex region: the
+  ~2 mm in-plane element size is too coarse for the wavefront to
+  propagate cleanly through the discrete monodomain operator.
+
+- `lv_ep_endo_150ms.mp4` -- 50x24x4 hex (h ~ 1 mm), 7 endocardial stim
+  balls firing at t = 0..2 ms (anatomical approximation of a Durrer-style
+  Purkinje-PVJ activation pattern). EP only (mechanics disabled because
+  the stronger active stress from the broader activation on the finer
+  mesh tips the passive H-O solver into element-folding). Watch the AP
+  sweep through the LV: peak Vm ~ +40 mV, ~65% of myocardium activated
+  by t = 75 ms.
+
+To get the EM video back with proper LV activation, the open work is to
+integrate the Stewart 2009 Purkinje + PVJ smear from
+`claude/review-branch-history-9W03K` so the cable has a real regenerative
+AP and the PVJ doesn't drain every terminal back to myocardial Vm. See
+`config/lv_ellipsoid_em_purkinje.options` for the prepared geometry.
 
 Detailed workflow and literature-comparison checklist:
 

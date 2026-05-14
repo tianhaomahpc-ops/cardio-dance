@@ -1,0 +1,53 @@
+# EP-only LV demo with multi-point endo stim. Same activation pattern as
+# lv_ellipsoid_em_endo.options but without the H-O / Land mechanics, so it
+# runs in ~3 min for 150 ms (vs ~60 min). Use this to render a clean
+# Vm-propagation video that shows what the EP wave actually does on the
+# refined ~1 mm hex mesh.
+
+mesh_path=benchmarks/lv_ellipsoid/lv_ellipsoid.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/lv_ellipsoid/fiber_f.gf
+fiber_s_path=benchmarks/lv_ellipsoid/fiber_s.gf
+fiber_n_path=benchmarks/lv_ellipsoid/fiber_n.gf
+
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+dt_pde_ms=0.05
+dt_ode_ms=0.05
+t_end_ms=150.0
+
+# 7 endocardial stim balls mimicking PVJ firing.
+stim_start_ms=0.0
+stim_end_ms=2.0
+stim_amp=-30.0
+stim_region=ball,3.5,0.0,-12.0,1.5
+stim_region=ball,-1.75,3.03,-12.0,1.5
+stim_region=ball,-1.75,-3.03,-12.0,1.5
+stim_region=ball,4.7,0.0,-5.0,1.5
+stim_region=ball,-2.35,4.07,-5.0,1.5
+stim_region=ball,-2.35,-4.07,-5.0,1.5
+stim_region=ball,5.5,0.0,2.0,1.5
+stim_xmin_mm=0.0
+stim_xmax_mm=-1.0
+stim_ymin_mm=0.0
+stim_ymax_mm=-1.0
+stim_zmin_mm=0.0
+stim_zmax_mm=-1.0
+stim_fraction=0.0
+
+enable_purkinje=0
+mechanics_enable=0
+
+use_petsc=1
+ksp_max_it=500
+ksp_rtol=1e-8
+
+output_stride=50
+checkpoint_stride=0
+output_dir=output/lv_ellipsoid_ep_endo
+checkpoint_dir=checkpoint/lv_ellipsoid_ep_endo
