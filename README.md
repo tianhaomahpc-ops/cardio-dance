@@ -278,7 +278,7 @@ ParaView render of Vm (left, mV) and active tension Ta (right, kPa) on the
 deforming LV through the action potential + contraction. Requires
 `python3-vtk9 python3-numpy ffmpeg`.
 
-Two reference renders live in `docs/media/`:
+Three reference renders live in `docs/media/`:
 
 - `lv_em_150ms.mp4` -- 24x12x3 hex, single apex stim ball, full EM
   (TT06 + Land 2017 + H-O). Mechanics works (max displacement ~ 0.62 mm,
@@ -288,17 +288,21 @@ Two reference renders live in `docs/media/`:
 
 - `lv_ep_endo_150ms.mp4` -- 50x24x4 hex (h ~ 1 mm), 7 endocardial stim
   balls firing at t = 0..2 ms (anatomical approximation of a Durrer-style
-  Purkinje-PVJ activation pattern). EP only (mechanics disabled because
-  the stronger active stress from the broader activation on the finer
-  mesh tips the passive H-O solver into element-folding). Watch the AP
-  sweep through the LV: peak Vm ~ +40 mV, ~65% of myocardium activated
-  by t = 75 ms.
+  Purkinje-PVJ activation pattern). EP only. Watch the AP sweep through
+  the LV: peak Vm ~ +40 mV, ~65% of myocardium activated by t = 75 ms.
 
-To get the EM video back with proper LV activation, the open work is to
-integrate the Stewart 2009 Purkinje + PVJ smear from
-`claude/review-branch-history-9W03K` so the cable has a real regenerative
-AP and the PVJ doesn't drain every terminal back to myocardial Vm. See
-`config/lv_ellipsoid_em_purkinje.options` for the prepared geometry.
+- `lv_em_stewart_purkinje.mp4` -- 50x24x4 hex,
+  **Stewart 2009 Purkinje cable + 3-fascicle Durrer pattern + smear PVJ**
+  + full EM. `use_stewart_purkinje=1` swaps the passive cable for a 1D
+  FE solver with a regenerative AP, so the cable's wavefront sweeps the
+  entire 1255-node tree in ~5-10 ms and fires the myocardium through 530
+  mapped PVJs (each smeared over a 3 mm ball). 89% of the LV is
+  activated by t = 35 ms. The clip covers t = 0..35 ms before the H-O
+  solver tips into a fold on this geometry. Reproducing the full 150 ms
+  EM cycle is the next step: either drop `land_Tref_kPa` further,
+  stagger the Purkinje root firing, or implement the endocardial
+  pressure-follower load to provide the bulk-restoring force the
+  Robin spring on epi alone can't supply.
 
 Detailed workflow and literature-comparison checklist:
 
