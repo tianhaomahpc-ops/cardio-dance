@@ -25,12 +25,16 @@
 #include "ode/Land2017Model.hpp"
 #include "ode/PassiveModel.hpp"
 #include "ode/RegionalIonicModel.hpp"
+#include "ode/StewartPurkinjeModel.hpp"
 #include "ode/TT06Model.hpp"
 #include "solver/ExtracellularRecoverySolver.hpp"
 #include "solver/LinearSolverFactory.hpp"
 #include "solver/MonodomainStepper.hpp"
+#include "solver/PurkinjeCableSolver.hpp"
+#include "solver/PvjCoupler.hpp"
 #include "solver/TorsoPotentialSolver.hpp"
 #include "space/Assembler.hpp"
+#include <sstream>
 
 int main(int argc, char* argv[]) {
   mfem::Mpi::Init(argc, argv);
@@ -136,6 +140,49 @@ int main(int argc, char* argv[]) {
         std::cout << "[purkinje] nodes=" << stepper.PurkinjeNumNodes()
                   << ", mapped_pvj=" << stepper.GlobalNumMappedPvj()
                   << ", max_pvj_dist_mm=" << stepper.GlobalMaxMappedPvjDistMm() << std::endl;
+      }
+
+      // Optional Stewart 2009 Purkinje + smear PVJ. When enabled, this
+      // replaces the built-in passive PurkinjeSystem inside MonodomainStepper
+      // with a 1D FE cable solver that has a regenerative AP, so the cable
+      // wave doesn't decay back through PVJ drain.
+      std::unique_ptr<mono::StewartPurkinjeModel> stewart_purkinje;
+      std::unique_ptr<mono::PurkinjeCableSolver> purkinje_cable;
+      std::unique_ptr<mono::PvjCoupler> pvj_coupler;
+      if (cfg.enable_purkinje && cfg.use_stewart_purkinje) {
+        // Count FE nodes from the network file header so the Stewart model
+        // can be sized correctly before LoadNetwork() runs.
+        int n_graph_nodes = 0, n_graph_edges = 0;
+        {
+          std::ifstream net(cfg.purkinje_network_path);
+          if (!net) {
+            throw std::runtime_error("Cannot open purkinje_network_path: " +
+                                     cfg.purkinje_network_path);
+          }
+          std::string hdr;
+          while (std::getline(net, hdr)) {
+            const auto hash = hdr.find('#');
+            if (hash != std::string::npos) hdr = hdr.substr(0, hash);
+            std::istringstream iss(hdr);
+            if (iss >> n_graph_nodes >> n_graph_edges) break;
+          }
+        }
+        const int subdiv = std::max(1, cfg.purkinje_cable_subdivision);
+        const int n_fe_nodes = n_graph_nodes + n_graph_edges * (subdiv - 1);
+        stewart_purkinje = std::make_unique<mono::StewartPurkinjeModel>(n_fe_nodes);
+        stewart_purkinje->InitializeRestState(cfg.purkinje_v_rest_mv);
+        purkinje_cable = std::make_unique<mono::PurkinjeCableSolver>(cfg, *stewart_purkinje);
+        purkinje_cable->LoadNetwork(cfg.purkinje_network_path);
+        purkinje_cable->Initialize(cfg.purkinje_v_rest_mv);
+        pvj_coupler = std::make_unique<mono::PvjCoupler>(cfg, assembler.PFES(), *purkinje_cable);
+        stepper.SetPvjCoupler(pvj_coupler.get());
+        if (rank == 0) {
+          std::cout << "[stewart-purkinje] FE nodes=" << purkinje_cable->NumFeNodes()
+                    << ", terminals=" << purkinje_cable->NumTerminals()
+                    << ", mapped_pvj=" << pvj_coupler->GlobalNumMappedPvj()
+                    << ", max_pvj_dist_mm=" << pvj_coupler->GlobalMaxMappedDistMm()
+                    << std::endl;
+        }
       }
 
       std::unique_ptr<mono::ExtracellularRecoverySolver> ue_solver;

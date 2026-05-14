@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "coupling/EMCoupler.hpp"
+#include "solver/PvjCoupler.hpp"
 
 namespace mono {
 namespace {
@@ -54,7 +55,9 @@ MonodomainStepper::MonodomainStepper(const SimulationConfig& cfg,
   assembler_.Vm().GetTrueDofs(vm_n_);
   linear_solver_.SetOperator(assembler_.A());
   BuildStimulusMask();
-  if (cfg_.enable_purkinje) {
+  // When use_stewart_purkinje=1 the embedded passive PurkinjeSystem is bypassed;
+  // main.cpp wires a PvjCoupler in via SetPvjCoupler().
+  if (cfg_.enable_purkinje && !cfg_.use_stewart_purkinje) {
     purkinje_ = std::make_unique<PurkinjeSystem>(cfg_, assembler_.PFES());
     purkinje_->Initialize(cfg_.purkinje_rest_mv);
   }
@@ -163,7 +166,7 @@ void MonodomainStepper::BuildRhs(double t_mid_ms) {
   assembler_.M().Mult(stim_true_, tmp_);
   rhs_.Add(-react_scale, tmp_);
 
-  if (purkinje_) {
+  if (purkinje_ || pvj_coupler_) {
     assembler_.M().Mult(pvj_current_true_, tmp_);
     rhs_.Add(-react_scale, tmp_);
   }
@@ -192,7 +195,9 @@ void MonodomainStepper::Bootstrap() {
 
   // 2.5) Purkinje->myocardium coupling current at V^n.
   t_begin = Clock::now();
-  if (purkinje_) {
+  if (pvj_coupler_) {
+    pvj_coupler_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+  } else if (purkinje_) {
     purkinje_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
   } else {
     pvj_current_true_ = 0.0;
@@ -221,7 +226,9 @@ void MonodomainStepper::Bootstrap() {
 
   // 6) Advance Purkinje states with updated myocardial Vm.
   t_begin = Clock::now();
-  if (purkinje_) {
+  if (pvj_coupler_) {
+    pvj_coupler_->AdvancePurkinje(cfg_.dt_pde_ms, vm_np1_, 0.5 * cfg_.dt_pde_ms);
+  } else if (purkinje_) {
     purkinje_->Advance(cfg_.dt_pde_ms, vm_np1_, 0.5 * cfg_.dt_pde_ms);
   }
   t_end = Clock::now();
@@ -254,7 +261,9 @@ void MonodomainStepper::StepNoCorrection() {
 
   // 2.5) Purkinje->myocardium coupling current at V^n.
   t_begin = Clock::now();
-  if (purkinje_) {
+  if (pvj_coupler_) {
+    pvj_coupler_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
+  } else if (purkinje_) {
     purkinje_->BuildHeartCouplingCurrent(vm_n_, pvj_current_true_);
   } else {
     pvj_current_true_ = 0.0;
@@ -283,7 +292,9 @@ void MonodomainStepper::StepNoCorrection() {
 
   // 6) Advance Purkinje states with updated myocardial Vm.
   t_begin = Clock::now();
-  if (purkinje_) {
+  if (pvj_coupler_) {
+    pvj_coupler_->AdvancePurkinje(cfg_.dt_pde_ms, vm_np1_, t_mid);
+  } else if (purkinje_) {
     purkinje_->Advance(cfg_.dt_pde_ms, vm_np1_, t_mid);
   }
   t_end = Clock::now();

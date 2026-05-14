@@ -85,6 +85,19 @@ struct SimulationConfig {
   double purkinje_stim_amp = 0.0;
   std::vector<int> purkinje_stim_nodes;
 
+  // Stewart 2009 Purkinje + PVJ smear (from claude/review-branch-history-9W03K).
+  // When `use_stewart_purkinje=1` the cable becomes a 1D FE solver with a
+  // regenerative AP (so the wave doesn't decay back through PVJ drain).
+  bool use_stewart_purkinje = false;
+  int purkinje_cable_subdivision = 4;
+  double purkinje_cm_uF_per_mm2 = 0.01;
+  double purkinje_edge_g_mS_per_mm = 1.5;
+  double purkinje_leak_g_mS_per_uF = 0.0;
+  double purkinje_v_rest_mv = -90.0;
+  double purkinje_stim_amp_uA_per_uF = 0.0;
+  double pvj_delay_ms = 0.0;
+  double pvj_smear_radius_mm = 0.0;
+
   double dt_pde_ms = 0.02;
   double dt_ode_ms = 0.01;
   double t_end_ms = 5.0;

@@ -1,0 +1,96 @@
+# LV electromechanical demo with Stewart 2009 Purkinje + 3-fascicle Durrer
+# pattern + smear PVJ. Uses the refactored Stewart cell model (regenerative
+# AP on the cable, so the wave doesn't decay through PVJ drain) and PVJ
+# smear (each terminal injects into multiple myocardial DOFs in a 3 mm
+# radius, mimicking the spatial spread of a real PVJ).
+
+mesh_path=benchmarks/lv_ellipsoid/lv_ellipsoid.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/lv_ellipsoid/fiber_f.gf
+fiber_s_path=benchmarks/lv_ellipsoid/fiber_s.gf
+fiber_n_path=benchmarks/lv_ellipsoid/fiber_n.gf
+
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+dt_pde_ms=0.05
+dt_ode_ms=0.05
+t_end_ms=150.0
+
+# No direct myocardial stim; Purkinje drives activation.
+stim_start_ms=0.0
+stim_end_ms=-1.0
+stim_amp=0.0
+stim_xmin_mm=0.0
+stim_xmax_mm=-1.0
+stim_ymin_mm=0.0
+stim_ymax_mm=-1.0
+stim_zmin_mm=0.0
+stim_zmax_mm=-1.0
+stim_fraction=0.0
+
+# Stewart 2009 Purkinje + smear PVJ. The 3 root indices (0, 1, 2) are the
+# LBB-style fascicle entries at the base endocardium.
+enable_purkinje=1
+use_stewart_purkinje=1
+purkinje_network_path=config/lv_purkinje.network
+purkinje_cable_subdivision=2
+purkinje_cm_uF_per_mm2=0.01
+purkinje_edge_g_mS_per_mm=1.5
+purkinje_leak_g_mS_per_uF=0.0
+purkinje_v_rest_mv=-74.7  # Stewart 2009 resting V_m
+purkinje_dt_ms=0.005
+purkinje_stim_start_ms=0.0
+purkinje_stim_end_ms=5.0
+purkinje_stim_amp_uA_per_uF=-300.0
+purkinje_stim_nodes=0,1,2
+pvj_g_mS=0.5
+pvj_max_dist_mm=3.0
+pvj_smear_radius_mm=3.0
+pvj_current_scale=2.0
+pvj_delay_ms=0.0
+
+# Solver
+use_petsc=1
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# ---------- Electromechanical coupling ----------
+mechanics_enable=1
+mech_substep=50
+
+mech_ho_a=0.059
+mech_ho_b=8.023
+mech_ho_af=18.472
+mech_ho_bf=16.026
+mech_ho_as=2.481
+mech_ho_bs=11.120
+mech_ho_afs=0.216
+mech_ho_bfs=11.436
+mech_ho_kappa=10000.0
+
+mech_bdr_base_attr=1
+mech_bdr_endo_attr=2
+mech_bdr_epi_attr=3
+mech_endo_pressure_pa=0.0
+mech_peri_spring_k_kpa_per_mm=2.0
+
+land_Tref_kPa=60.0
+land_Ca50_uM=0.805
+
+mech_snes_max_it=30
+mech_snes_rtol=1e-5
+mech_snes_atol=1e-8
+mech_snes_print_level=0
+mech_ksp_max_it=500
+mech_ksp_rtol=1e-5
+mech_asm_overlap=1
+
+output_stride=50
+checkpoint_stride=0
+output_dir=output/lv_ellipsoid_em_stewart
+checkpoint_dir=checkpoint/lv_ellipsoid_em_stewart

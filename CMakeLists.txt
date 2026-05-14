@@ -24,6 +24,11 @@ add_library(monodomain_core
   src/solver/LinearSolverFactory.cpp
   src/solver/MonodomainStepper.cpp
   src/solver/PurkinjeSystem.cpp
+  src/solver/PurkinjeCableSolver.cpp
+  src/solver/PvjCoupler.cpp
+  src/ode/StewartPurkinjeModel.cpp
+  src/ode/stewart_generated.c
+  src/io/PseudoEcg.cpp
   src/solver/ExtracellularRecoverySolver.cpp
   src/solver/TorsoPotentialSolver.cpp
   src/coupling/InterfaceMapper.cpp

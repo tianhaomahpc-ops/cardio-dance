@@ -11,6 +11,7 @@
 namespace mono {
 
 class EMCoupler;
+class PvjCoupler;
 
 
 // Per-step wall-time breakdown for solver and reaction workflow.
@@ -46,6 +47,11 @@ class MonodomainStepper {
   // ionic and Purkinje advances each step. Pointer must outlive the stepper.
   void AttachEMCoupler(EMCoupler* coupler) { em_coupler_ = coupler; }
 
+  // Optional Stewart-Purkinje cable + smear PVJ coupler. When set, replaces the
+  // built-in passive PurkinjeSystem for both the heart-side current injection
+  // and the cable advance each step. Pointer must outlive the stepper.
+  void SetPvjCoupler(PvjCoupler* coupler) { pvj_coupler_ = coupler; }
+
   double TimeMs() const { return t_ms_; }
   int StepCount() const { return step_; }
 
@@ -78,7 +84,8 @@ class MonodomainStepper {
   mfem::Vector stim_true_;
   mfem::Vector pvj_current_true_;
   std::unique_ptr<PurkinjeSystem> purkinje_;
-  EMCoupler* em_coupler_ = nullptr;  // non-owning, optional
+  PvjCoupler* pvj_coupler_ = nullptr;  // non-owning, optional Stewart path
+  EMCoupler* em_coupler_ = nullptr;    // non-owning, optional
   StepTimingBreakdown last_timing_;
 
   void BuildStimulusMask();

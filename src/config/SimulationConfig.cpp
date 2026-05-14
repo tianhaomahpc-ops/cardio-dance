@@ -187,6 +187,16 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "purkinje_stim_end_ms") cfg.purkinje_stim_end_ms = std::stod(val);
     else if (key == "purkinje_stim_amp") cfg.purkinje_stim_amp = std::stod(val);
     else if (key == "purkinje_stim_nodes") cfg.purkinje_stim_nodes = ParseIntList(val);
+    // Stewart Purkinje + smear PVJ config (claude/review-branch-history-9W03K).
+    else if (key == "use_stewart_purkinje") cfg.use_stewart_purkinje = ParseBool(val);
+    else if (key == "purkinje_cable_subdivision") cfg.purkinje_cable_subdivision = std::stoi(val);
+    else if (key == "purkinje_cm_uF_per_mm2") cfg.purkinje_cm_uF_per_mm2 = std::stod(val);
+    else if (key == "purkinje_edge_g_mS_per_mm") cfg.purkinje_edge_g_mS_per_mm = std::stod(val);
+    else if (key == "purkinje_leak_g_mS_per_uF") cfg.purkinje_leak_g_mS_per_uF = std::stod(val);
+    else if (key == "purkinje_v_rest_mv") cfg.purkinje_v_rest_mv = std::stod(val);
+    else if (key == "purkinje_stim_amp_uA_per_uF") cfg.purkinje_stim_amp_uA_per_uF = std::stod(val);
+    else if (key == "pvj_delay_ms") cfg.pvj_delay_ms = std::stod(val);
+    else if (key == "pvj_smear_radius_mm") cfg.pvj_smear_radius_mm = std::stod(val);
     else if (key == "dt_pde_ms") cfg.dt_pde_ms = std::stod(val);
     else if (key == "dt_ode_ms") cfg.dt_ode_ms = std::stod(val);
     else if (key == "t_end_ms") cfg.t_end_ms = std::stod(val);
