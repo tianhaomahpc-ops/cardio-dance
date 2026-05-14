@@ -4,7 +4,9 @@
 #include <cctype>
 #include <cstdint>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <sstream>
 #include <stdexcept>
@@ -336,6 +338,40 @@ void PurkinjeSystem::Advance(double dt_ms, const mfem::Vector& vm_true, double t
         throw std::runtime_error("PurkinjeSystem produced non-finite voltage");
       }
       vp_[i] = std::clamp(vp_[i], -120.0, 60.0);
+    }
+  }
+
+  // Optional diagnostic: set PURKINJE_DEBUG=1 to print Vp summary statistics
+  // and the first three nodes' adjacency every 20 calls. Useful for tuning
+  // purkinje_edge_g_mS / pvj_g_mS for a new mesh.
+  static int log_call = 0;
+  static const char* dbg_env = std::getenv("PURKINJE_DEBUG");
+  if (dbg_env && *dbg_env == '1') {
+    log_call += 1;
+    if (log_call == 1 && rank_ == 0) {
+      for (int probe : {0, 1, 2}) {
+        if (probe >= n_nodes_) break;
+        std::cout << "[purkinje:adj] node " << probe << " has "
+                  << adjacency_[probe].size() << " neighbors:";
+        for (const auto& nbr : adjacency_[probe]) {
+          std::cout << " (" << nbr.first << ", g=" << nbr.second << ")";
+        }
+        std::cout << "\n";
+      }
+      std::cout << "[purkinje:adj] edges=" << edges_.size() << ", nodes=" << n_nodes_ << "\n";
+    }
+    if (log_call % 20 == 1 && rank_ == 0) {
+      double vp_min = vp_[0], vp_max = vp_[0];
+      int n_above_50 = 0, n_above_zero = 0;
+      for (int i = 0; i < n_nodes_; ++i) {
+        if (vp_[i] < vp_min) vp_min = vp_[i];
+        if (vp_[i] > vp_max) vp_max = vp_[i];
+        if (vp_[i] > -50.0) ++n_above_50;
+        if (vp_[i] > 0.0) ++n_above_zero;
+      }
+      std::cout << "[purkinje@t=" << t_mid_ms << "] Vp=[" << vp_min << ", "
+                << vp_max << "] n>-50=" << n_above_50 << " n>0=" << n_above_zero
+                << "/" << n_nodes_ << " stim_on=" << (stim_on ? 1 : 0) << "\n";
     }
   }
 }

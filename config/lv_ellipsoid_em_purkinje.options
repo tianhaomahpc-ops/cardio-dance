@@ -1,0 +1,120 @@
+# LV electromechanical demo with a Durrer-style 3-fascicle Purkinje system.
+# The myocardium is paced through 3 LBB-like roots at the base endocardium
+# growing toward the apex, so the entire ventricle activates within ~30 ms
+# instead of a slow myocardium-only wave from a small apex stim ball.
+#
+# Regenerate Purkinje (1255 nodes, 605 terminals filling the endo cavity):
+#   python3.12 tools/generate_purkinje_tree.py \
+#     --root=4.0,0.0,3.5  --direction=0,0,-1 \
+#     --root=-2.0,3.5,3.5 --direction=-0.15,0.15,-1 \
+#     --root=-2.0,-3.5,3.5 --direction=-0.15,-0.15,-1 \
+#     --length 1.5 --max_depth 11 --p_bifurcate 0.85 \
+#     --bifurcation_angle_deg 22 --angle_sigma 15 \
+#     --bbox_min=-6,-6,-16 --bbox_max=6,6,5 --seed 17 \
+#     --out config/lv_purkinje.network
+
+mesh_path=benchmarks/lv_ellipsoid/lv_ellipsoid.mesh
+
+use_fiber_gf=1
+fiber_f_path=benchmarks/lv_ellipsoid/fiber_f.gf
+fiber_s_path=benchmarks/lv_ellipsoid/fiber_s.gf
+fiber_n_path=benchmarks/lv_ellipsoid/fiber_n.gf
+
+# EP material (Niederer slab anisotropy applied uniformly).
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+dt_pde_ms=0.05
+dt_ode_ms=0.05
+t_end_ms=150.0
+
+# No direct myocardial stim; Purkinje drives the activation.
+stim_start_ms=0.0
+stim_end_ms=-1.0
+stim_amp=0.0
+stim_xmin_mm=0.0
+stim_xmax_mm=-1.0
+stim_ymin_mm=0.0
+stim_ymax_mm=-1.0
+stim_zmin_mm=0.0
+stim_zmax_mm=-1.0
+stim_fraction=0.0
+
+# Purkinje: Durrer-style 3-fascicle LBB pattern (roots at base endocardium,
+# growing toward the apex). Indices 0, 1, 2 are the three roots.
+enable_purkinje=1
+purkinje_network_path=config/lv_purkinje.network
+purkinje_cm_uF_per_mm=0.01
+# Cable conduction: passive linear cable with g_axial = 1.5 mS * inv(length).
+# With 1.5 mm segments and Cm = 0.01 uF/mm, the diffusion coefficient is
+# ~200 mm^2/ms; the wave reaches all 1255 cable nodes within ~15 ms.
+purkinje_edge_g_mS=1.5
+purkinje_leak_g_mS=0.0
+purkinje_rest_mv=-85.23
+purkinje_dt_ms=0.001
+# PVJ: at every terminal node, inject current proportional to (V_p - V_m).
+# Strong enough to push myocardial Vm past the AP firing threshold without
+# overloading the passive cable.
+pvj_g_mS=0.1
+pvj_max_dist_mm=4.0
+pvj_current_scale=2.0
+# Hold the 3 fascicle roots depolarized for the full activation window so the
+# passive cable doesn't decay before the cable wavefront has traversed the
+# tree. A Stewart 2009 Purkinje cell model would give a self-sustaining AP
+# (todo: integrate from claude/review-branch-history-9W03K).
+purkinje_stim_start_ms=0.0
+purkinje_stim_end_ms=100.0
+purkinje_stim_amp=500.0
+purkinje_stim_nodes=0,1,2
+
+# Solver: MFEM CG + Hypre BoomerAMG for EP; MFEM Newton + HypreGMRES for
+# mechanics (MFEM's PetscNonlinearSolver wrapper exits after iter 0 silently
+# on this problem; needs further investigation).
+use_petsc=1
+use_hypre_boomeramg=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# ---------- Electromechanical coupling ----------
+mechanics_enable=1
+mech_substep=20   # 20 * 0.05ms = 1 ms between mechanics solves
+
+# Holzapfel-Ogden 2009 (isochoric ground, full-F anisotropic).
+mech_ho_a=0.059
+mech_ho_b=8.023
+mech_ho_af=18.472
+mech_ho_bf=16.026
+mech_ho_as=2.481
+mech_ho_bs=11.120
+mech_ho_afs=0.216
+mech_ho_bfs=11.436
+mech_ho_kappa=10000.0
+
+# Boundary attrs from generate_lv_ellipsoid_case:
+#   1 = base ring (clamped), 2 = endo, 3 = epi
+mech_bdr_base_attr=1
+mech_bdr_endo_attr=2
+mech_bdr_epi_attr=3
+mech_endo_pressure_pa=0.0
+mech_peri_spring_k_kpa_per_mm=2.0
+
+# Land 2017 active-tension (Tref kept moderate for numerical stability).
+land_Tref_kPa=60.0
+land_Ca50_uM=0.805
+
+mech_snes_max_it=30
+mech_snes_rtol=1e-5
+mech_snes_atol=1e-8
+mech_snes_print_level=0
+mech_ksp_max_it=500
+mech_ksp_rtol=1e-5
+mech_asm_overlap=1
+
+# Save a ParaView frame every 2.5 ms; 150 ms -> 60 frames.
+output_stride=50
+checkpoint_stride=0
+output_dir=output/lv_ellipsoid_em_purkinje
+checkpoint_dir=checkpoint/lv_ellipsoid_em_purkinje
