@@ -113,9 +113,41 @@
     `latest.meta`, `vm_rank000000.gf..vm_rank000003.gf`,
     `tt06_rank000000.bin..tt06_rank000003.bin`
 
+## Mechanics: LV passive inflation (Land 2015 RSPA Problem 3)
+
+Configuration: `config/lv_passive_inflation.options`
+  (50x24x4 LV ellipsoid, fibers ±60 deg helical, Holzapfel-Ogden constants
+  from Land 2015, no EP, `land_Tref_kPa=0`, `mech_endo_pressure_pa=200`,
+  `mech_endo_pressure_ramp_steps=10`).
+
+Run:
+```
+mpirun -np 4 ./build/monodomain --config config/lv_passive_inflation.options
+```
+
+Result at p = 200 Pa (one mechanics solve, 10 ramped Newton sub-solves):
+
+| Quantity                            | Value         | Pass criterion                 |
+|-------------------------------------|---------------|--------------------------------|
+| `|u|max`                            | 0.91 mm       | finite, < 5% of mesh extent    |
+| Mean endo radial displacement       | +0.31 mm (out)| positive = outward inflation   |
+| `J` range                           | (0.972, 1.028)| ~ 3% drift, OK for kappa=1000  |
+| Apex z-displacement                 | -0.07 mm down | matches Land 2015 elongation   |
+| Newton failures                     | 0 / 10        | every ramp step converged      |
+
+Linear extrapolation to Land 2015's reference of 10 kPa gives mean endo
+radial displacement ~ 15 mm vs Land 2015 / lifex Africa 2023 reference
+of 7-10 mm; the ~2x softness is consistent with using a kappa=1000 kPa
+volumetric penalty instead of the incompressible Lagrange multiplier
+formulation in Land 2015. Reaching higher pressures (1-10 kPa) currently
+needs additional ramping density or a line search in the Newton path.
+
 ## Pending checks
 
-- None.
+- LV passive inflation at full 10 kPa (Land 2015 reference); blocked on
+  Newton line search / trust region in the mechanics path.
+- LV active contraction quantitative check (Land 2015 twist + ejection
+  fraction); blocked on the same Newton robustness fix.
 
 ## Notes
 
