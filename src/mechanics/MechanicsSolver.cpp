@@ -262,6 +262,79 @@ class NormalSpringBdrNLFI : public mfem::NonlinearFormIntegrator {
   double k_;
 };
 
+// Endocardial pressure dead-load on bdr_endo_attr. Reference traction
+//   t_ref = -p n_endo_outward
+// On the endo surface the solid's outward normal points INTO the cavity,
+// so t_ref points OUT of the cavity, inflating the wall. The contribution
+// to the residual R = -integral t_ref . v dA = +integral p (n_ref . v) dA.
+// Because this is a Lagrangian dead-load (no F dependence), the Jacobian
+// w.r.t. u is zero.
+//
+// Holds a const reference to the kPa pressure so that
+// SetEndocardialPressurePa can ramp the load without rebuilding the form.
+class EndoPressureDeadLoadBdrNLFI : public mfem::NonlinearFormIntegrator {
+ public:
+  explicit EndoPressureDeadLoadBdrNLFI(const double& p_kpa_ref)
+      : p_kpa_(p_kpa_ref) {}
+
+  void AssembleFaceVector(const mfem::FiniteElement& el1,
+                          const mfem::FiniteElement& /*el2*/,
+                          mfem::FaceElementTransformations& Tr,
+                          const mfem::Vector& elfun,
+                          mfem::Vector& elvect) override {
+    const int dim = Tr.GetSpaceDim();
+    const int nd = el1.GetDof();
+    elvect.SetSize(elfun.Size());
+    elvect = 0.0;
+    if (p_kpa_ == 0.0) return;
+
+    mfem::DenseMatrix r_mat(elvect.GetData(), nd, dim);
+    mfem::Vector shape(nd);
+    mfem::Vector n_ref(dim);
+
+    const int q_order = 2 * el1.GetOrder();
+    const mfem::IntegrationRule* ir =
+        &mfem::IntRules.Get(Tr.GetGeometryType(), q_order);
+
+    for (int q = 0; q < ir->GetNPoints(); ++q) {
+      const mfem::IntegrationPoint& ip = ir->IntPoint(q);
+      Tr.SetAllIntPoints(&ip);
+      const mfem::IntegrationPoint& eip1 = Tr.GetElement1IntPoint();
+      el1.CalcShape(eip1, shape);
+
+      // CalcOrtho returns the reference outward normal scaled by |J_face|;
+      // surface measure dS = ip.weight * |J_face|, absorbed into n_ref.
+      mfem::CalcOrtho(Tr.Jacobian(), n_ref);
+      const double nlen = n_ref.Norml2();
+      if (nlen < 1e-14) continue;
+
+      const double w = ip.weight * p_kpa_;
+      for (int d = 0; d < dim; ++d) {
+        const double nd_w = w * n_ref(d);
+        for (int j = 0; j < nd; ++j) {
+          r_mat(j, d) += nd_w * shape(j);
+        }
+      }
+    }
+  }
+
+  void AssembleFaceGrad(const mfem::FiniteElement& el1,
+                        const mfem::FiniteElement& /*el2*/,
+                        mfem::FaceElementTransformations& Tr,
+                        const mfem::Vector& elfun,
+                        mfem::DenseMatrix& elmat) override {
+    // Dead-load: no u-dependence, zero Jacobian.
+    const int dim = Tr.GetSpaceDim();
+    const int nd = el1.GetDof();
+    (void)elfun;
+    elmat.SetSize(nd * dim);
+    elmat = 0.0;
+  }
+
+ private:
+  const double& p_kpa_;
+};
+
 }  // namespace
 
 MechanicsSolver::MechanicsSolver(const SimulationConfig& cfg,
@@ -351,10 +424,23 @@ void MechanicsSolver::SetActiveTension(const mfem::ParGridFunction& ta_kPa) {
 
 void MechanicsSolver::SetEndocardialPressurePa(double p_pa) {
   endo_pressure_pa_ = p_pa;
-  // Note: pressure-follower implementation requires a custom boundary integrator
-  // to assemble -p * (J F^{-T} n_ref) on bdr_endo_attr. Left as a follow-up
-  // (Phase 1d) — currently the load is silently ignored if not connected.
-  // For initial wiring, document and proceed.
+  // Stresses elsewhere are in kPa (Holzapfel-Ogden parameters are kPa);
+  // convert once here so the dead-load integrator can use the same units.
+  endo_pressure_kpa_ref_ = p_pa * 1.0e-3;
+
+  if (endo_pressure_integrator_added_) return;
+  if (cfg_.mech_bdr_endo_attr < 1) return;
+  mfem::ParMesh* pmesh = ep_pfes_.GetParMesh();
+  if (pmesh->bdr_attributes.Size() == 0) return;
+  const int max_attr = pmesh->bdr_attributes.Max();
+  if (cfg_.mech_bdr_endo_attr > max_attr) return;
+  endo_marker_.SetSize(max_attr);
+  endo_marker_ = 0;
+  endo_marker_[cfg_.mech_bdr_endo_attr - 1] = 1;
+  nlform_->AddBdrFaceIntegrator(
+      new EndoPressureDeadLoadBdrNLFI(endo_pressure_kpa_ref_),
+      endo_marker_);
+  endo_pressure_integrator_added_ = true;
 }
 
 void MechanicsSolver::EnsureSolver() {

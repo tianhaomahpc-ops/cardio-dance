@@ -79,6 +79,13 @@ class MechanicsSolver {
   // Active tension grid function (non-owning).
   const mfem::ParGridFunction* ta_gf_ = nullptr;
   double endo_pressure_pa_ = 0.0;
+  bool endo_pressure_integrator_added_ = false;
+  // Backing storage for the endo-pressure integrator's pressure value
+  // (kPa, dead-load). The integrator holds a const reference into this so
+  // that SetEndocardialPressurePa can re-tune the load without rebuilding
+  // the nonlinear form.
+  double endo_pressure_kpa_ref_ = 0.0;
+  mfem::Array<int> endo_marker_;
 
   // Essential dofs (base clamp).
   mfem::Array<int> ess_tdofs_;
