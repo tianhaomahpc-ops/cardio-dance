@@ -198,18 +198,22 @@ def render_panel(
     fiber_pd: vtk.vtkPolyData,
     camera_dir: tuple[float, float, float],
     view_up: tuple[float, float, float],
-    clip_plane: tuple[float, float, float, float] | None,
+    clip_normal: tuple[float, float, float] | None,
     title: str,
+    clip_origin: tuple[float, float, float] = (0.0, 0.0, -5.0),
+    cam_focus: tuple[float, float, float] = (0.0, 0.0, -5.0),
+    cam_distance: float = 65.0,
+    show_colorbar: bool = True,
 ) -> np.ndarray:
     renderer = vtk.vtkRenderer()
     renderer.SetBackground(0.07, 0.07, 0.09)
 
     # LV shell (semi-transparent surface; optionally clipped).
     lv_source = lv_ug
-    if clip_plane is not None:
+    if clip_normal is not None:
         plane = vtk.vtkPlane()
-        plane.SetOrigin(0.0, 0.0, clip_plane[3])
-        plane.SetNormal(clip_plane[0], clip_plane[1], clip_plane[2])
+        plane.SetOrigin(*clip_origin)
+        plane.SetNormal(*clip_normal)
         clipper = vtk.vtkClipDataSet()
         clipper.SetInputData(lv_ug)
         clipper.SetClipFunction(plane)
@@ -226,7 +230,7 @@ def render_panel(
     lv_actor = vtk.vtkActor()
     lv_actor.SetMapper(lv_mapper)
     lv_actor.GetProperty().SetColor(0.78, 0.72, 0.65)
-    lv_actor.GetProperty().SetOpacity(0.35 if clip_plane is None else 0.55)
+    lv_actor.GetProperty().SetOpacity(0.35 if clip_normal is None else 0.55)
     lv_actor.GetProperty().SetEdgeVisibility(False)
     renderer.AddActor(lv_actor)
 
@@ -282,18 +286,19 @@ def render_panel(
     renderer.AddActor(fib_actor)
 
     # Colorbar for fiber helical angle.
-    cbar = vtk.vtkScalarBarActor()
-    cbar.SetLookupTable(lut)
-    cbar.SetTitle("alpha (deg)")
-    cbar.SetNumberOfLabels(5)
-    cbar.SetMaximumWidthInPixels(60)
-    cbar.SetMaximumHeightInPixels(int(height * 0.55))
-    cbar.GetTitleTextProperty().SetColor(0.95, 0.95, 0.95)
-    cbar.GetTitleTextProperty().SetFontSize(14)
-    cbar.GetLabelTextProperty().SetColor(0.95, 0.95, 0.95)
-    cbar.GetLabelTextProperty().SetFontSize(12)
-    cbar.SetPosition(0.90, 0.22)
-    renderer.AddActor2D(cbar)
+    if show_colorbar:
+        cbar = vtk.vtkScalarBarActor()
+        cbar.SetLookupTable(lut)
+        cbar.SetTitle("alpha (deg)")
+        cbar.SetNumberOfLabels(5)
+        cbar.SetMaximumWidthInPixels(60)
+        cbar.SetMaximumHeightInPixels(int(height * 0.55))
+        cbar.GetTitleTextProperty().SetColor(0.95, 0.95, 0.95)
+        cbar.GetTitleTextProperty().SetFontSize(14)
+        cbar.GetLabelTextProperty().SetColor(0.95, 0.95, 0.95)
+        cbar.GetLabelTextProperty().SetFontSize(12)
+        cbar.SetPosition(0.90, 0.22)
+        renderer.AddActor2D(cbar)
 
     # Title.
     txt = vtk.vtkTextActor()
@@ -305,10 +310,10 @@ def render_panel(
 
     # Camera.
     cam = renderer.GetActiveCamera()
-    cam.SetFocalPoint(0.0, 0.0, -5.0)
-    dist = 65.0
-    cam.SetPosition(dist * camera_dir[0], dist * camera_dir[1],
-                    -5.0 + dist * camera_dir[2])
+    cam.SetFocalPoint(*cam_focus)
+    cam.SetPosition(cam_focus[0] + cam_distance * camera_dir[0],
+                    cam_focus[1] + cam_distance * camera_dir[1],
+                    cam_focus[2] + cam_distance * camera_dir[2])
     cam.SetViewUp(*view_up)
     renderer.ResetCameraClippingRange()
 
@@ -409,19 +414,19 @@ def main():
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(0.6, -0.7, 0.4), view_up=(0, 0, 1),
-        clip_plane=None,
+        clip_normal=None,
         title="(a) iso view  red=Purkinje cable, yellow=PVJ terminals",
     ))
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(0.0, -1.0, 0.0), view_up=(0, 0, 1),
-        clip_plane=None,
+        clip_normal=None,
         title="(b) anterior view (-Y)",
     ))
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(0.0, 0.0, 1.0), view_up=(0, 1, 0),
-        clip_plane=None,
+        clip_normal=None,
         title="(c) basal (+Z, looking down apex axis)",
     ))
     # Slice panels: cut so the half AWAY from camera is removed,
@@ -429,19 +434,19 @@ def main():
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(0.6, -0.7, 0.4), view_up=(0, 0, 1),
-        clip_plane=(0.0, -1.0, 0.0, 0.0),
+        clip_normal=(0.0, -1.0, 0.0), clip_origin=(0.0, 0.0, -5.0),
         title="(d) sagittal cut y=0 (transmural fibers visible)",
     ))
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(0.0, 0.0, -1.0), view_up=(0, 1, 0),
-        clip_plane=(0.0, 0.0, 1.0, -5.0),
+        clip_normal=(0.0, 0.0, 1.0), clip_origin=(0.0, 0.0, -5.0),
         title="(e) transverse cut z=-5 mm (mid-cavity ring)",
     ))
     panels.append(render_panel(
         W, H, lv_ug, purkinje_pd, terms_pd, fiber_pd,
         camera_dir=(1.0, 0.0, 0.0), view_up=(0, 0, 1),
-        clip_plane=(1.0, 0.0, 0.0, 0.0),
+        clip_normal=(1.0, 0.0, 0.0), clip_origin=(0.0, 0.0, -5.0),
         title="(f) coronal cut x=0",
     ))
 
