@@ -241,6 +241,7 @@ SimulationConfig LoadConfigFile(const std::string& path) {
     else if (key == "mech_bdr_endo_attr") cfg.mech_bdr_endo_attr = std::stoi(val);
     else if (key == "mech_bdr_epi_attr") cfg.mech_bdr_epi_attr = std::stoi(val);
     else if (key == "mech_endo_pressure_pa") cfg.mech_endo_pressure_pa = std::stod(val);
+    else if (key == "mech_endo_pressure_ramp_steps") cfg.mech_endo_pressure_ramp_steps = std::stoi(val);
     else if (key == "mech_peri_spring_k_kpa_per_mm") cfg.mech_peri_spring_k_kpa_per_mm = std::stod(val);
     else if (key == "land_Tref_kPa") cfg.land_Tref_kPa = std::stod(val);
     else if (key == "land_Ca50_uM") cfg.land_Ca50_uM = std::stod(val);

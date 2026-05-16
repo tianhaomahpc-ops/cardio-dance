@@ -83,8 +83,11 @@ class MechanicsSolver {
   // Backing storage for the endo-pressure integrator's pressure value
   // (kPa, dead-load). The integrator holds a const reference into this so
   // that SetEndocardialPressurePa can re-tune the load without rebuilding
-  // the nonlinear form.
+  // the nonlinear form. endo_pressure_kpa_applied_ tracks the value the
+  // current displacement was solved against, so ramping picks up where the
+  // last Solve() ended.
   double endo_pressure_kpa_ref_ = 0.0;
+  double endo_pressure_kpa_applied_ = 0.0;
   mfem::Array<int> endo_marker_;
 
   // Essential dofs (base clamp).

@@ -480,8 +480,31 @@ int MechanicsSolver::Solve() {
   // Apply zero on essential dofs as starting condition (clamped base).
   for (int i = 0; i < ess_tdofs_.Size(); ++i) x_true[ess_tdofs_[i]] = 0.0;
 
+  // Optional endo-pressure ramping: subdivide (applied -> target) into N
+  // increments and run Newton once per increment. The integrator picks up
+  // the new value automatically through endo_pressure_kpa_ref_'s const ref.
+  const int ramp_n = std::max(cfg_.mech_endo_pressure_ramp_steps, 1);
+  const double p_target_kpa = endo_pressure_pa_ * 1.0e-3;
+  const double p_start_kpa = endo_pressure_kpa_applied_;
+  const bool needs_ramp =
+      (ramp_n > 1) && (std::abs(p_target_kpa - p_start_kpa) > 1e-9);
+
   mfem::Vector zero;  // empty rhs => Newton solves R(u) = 0
-  newton_->Mult(zero, x_true);
+  int total_iters = 0;
+  if (needs_ramp) {
+    for (int k = 1; k <= ramp_n; ++k) {
+      const double frac = static_cast<double>(k) / ramp_n;
+      endo_pressure_kpa_ref_ = p_start_kpa + (p_target_kpa - p_start_kpa) * frac;
+      newton_->Mult(zero, x_true);
+      if (auto* nw = dynamic_cast<mfem::IterativeSolver*>(newton_.get())) {
+        total_iters += nw->GetNumIterations();
+      }
+    }
+  } else {
+    endo_pressure_kpa_ref_ = p_target_kpa;
+    newton_->Mult(zero, x_true);
+  }
+  endo_pressure_kpa_applied_ = p_target_kpa;
 
   u_->SetFromTrueDofs(x_true);
 
@@ -491,6 +514,7 @@ int MechanicsSolver::Solve() {
     return sn->GetNumIterations();
   }
 #endif
+  if (needs_ramp) return total_iters;
   if (auto* nw = dynamic_cast<mfem::IterativeSolver*>(newton_.get())) {
     return nw->GetNumIterations();
   }

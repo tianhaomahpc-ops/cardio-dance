@@ -160,6 +160,12 @@ struct SimulationConfig {
   int    mech_bdr_endo_attr = 2;
   int    mech_bdr_epi_attr  = 3;
   double mech_endo_pressure_pa = 0.0;   // applied on bdr_endo_attr (follower load)
+  // Linear pressure ramp inside MechanicsSolver::Solve when the target pressure
+  // changes. Each Solve() call subdivides the (previous -> target) load
+  // increment into this many sub-Newton solves, restarting from the previous
+  // displacement at each sub-step. Required for moderate loads (~kPa) where
+  // a one-shot Newton blows the trust region; >= 10 typically robust.
+  int mech_endo_pressure_ramp_steps = 1;
   double mech_peri_spring_k_kpa_per_mm = 0.5;  // Robin spring on bdr_epi_attr
 
   // Land 2017 parameters (overrides for the C++-side struct defaults).

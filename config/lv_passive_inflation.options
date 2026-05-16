@@ -61,9 +61,11 @@ mech_bdr_base_attr=1
 mech_bdr_endo_attr=2
 mech_bdr_epi_attr=3
 
-# Endocardial pressure dead-load. Land 2015 ramps 0 -> 10 kPa; start with a
-# moderate value to verify the integrator before sweeping.
-mech_endo_pressure_pa=2000.0   # 2 kPa
+# Endocardial pressure dead-load. Land 2015 ramps 0 -> 10 kPa; start with
+# 2 kPa applied in 20 incremental sub-Newton solves (load ramping inside
+# MechanicsSolver::Solve).
+mech_endo_pressure_pa=2000.0
+mech_endo_pressure_ramp_steps=20
 mech_peri_spring_k_kpa_per_mm=0.0   # no pericardium for passive verification
 
 # No active.
