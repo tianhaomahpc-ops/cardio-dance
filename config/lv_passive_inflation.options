@@ -21,7 +21,7 @@ sigma_n_mS_per_mm=0.0176
 
 dt_pde_ms=0.05
 dt_ode_ms=0.05
-t_end_ms=5.0   # one mechanics step at mech_substep=50 (= 2.5 ms each)
+t_end_ms=2.5   # exactly one mechanics solve at mech_substep=50
 
 stim_start_ms=0.0
 stim_end_ms=-1.0
@@ -65,7 +65,7 @@ mech_bdr_epi_attr=3
 # 2 kPa applied in 20 incremental sub-Newton solves (load ramping inside
 # MechanicsSolver::Solve).
 mech_endo_pressure_pa=200.0
-mech_endo_pressure_ramp_steps=20
+mech_endo_pressure_ramp_steps=10
 mech_peri_spring_k_kpa_per_mm=0.0   # no pericardium for passive verification
 
 # No active.
@@ -76,8 +76,8 @@ mech_snes_max_it=40
 mech_snes_rtol=1e-6
 mech_snes_atol=1e-9
 mech_snes_print_level=1   # show Newton residual history
-mech_ksp_max_it=500
-mech_ksp_rtol=1e-6
+mech_ksp_max_it=200
+mech_ksp_rtol=1e-3
 mech_asm_overlap=1
 
 output_stride=10
