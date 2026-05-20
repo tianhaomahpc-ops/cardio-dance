@@ -7,17 +7,15 @@
 #   gmsh -3 tools/half_ellipsoid.geo -o benchmarks/half_ellipsoid/heart.msh \
 #        -setnumber h_mm 1.0
 #   ./build/finalize_half_ellipsoid_mesh --emit-fibers
-# Regenerate Purkinje (4 LBB-style fascicle entries: 3 base-side roots
-# matching Durrer 1970 earliest-activation pattern + 1 septal-apical root
-# representing Purkinje running down the septum toward apex; this gives
-# direct PVJ stim near apex and restores the positive T wave). The
-# cavity_ellipsoid clip keeps all nodes inside the LV endocardium (inner
-# ellipsoid is ~30x15x15 in mesh; we use 28x13x13 for a 2 mm safety margin):
+# Regenerate Purkinje (3 LBB-style base-side fascicle entries growing toward apex,
+# matching Durrer 1970 earliest-activation pattern: high-anterior paraseptal,
+# mid-septal, high-posterior paraseptal). The cavity_ellipsoid clip keeps all
+# nodes inside the LV endocardium (inner ellipsoid is ~30x15x15 in mesh; we
+# use 28x13x13 for a 2 mm safety margin):
 #   python3 tools/generate_purkinje_tree.py \
 #     --root=5,8,0   --direction=1,-0.3,0 \
 #     --root=10,0,5  --direction=1,0,-0.3 \
 #     --root=5,-8,0  --direction=1,0.3,0 \
-#     --root=18,0,0  --direction=1,0,0 \
 #     --length 2.5 --max_depth 17 --p_bifurcate 0.94 \
 #     --bifurcation_angle_deg 22 --angle_sigma 18 \
 #     --bbox_min=0,-14,-14 --bbox_max=29,14,14 \
@@ -54,8 +52,8 @@ stim_zmin_mm=0.0
 stim_zmax_mm=-1.0
 stim_fraction=0.0
 
-# Purkinje: 2779 nodes, 1471 terminals, 4 LBB-style roots (3 base-side +
-# 1 septal-apical), clipped to LV endocardial cavity (28x13x13 ellipsoid).
+# Purkinje: 1829 nodes, 1006 terminals, base-side LBB-style roots, clipped
+# to LV endocardial cavity (28x13x13 ellipsoid).
 enable_purkinje=1
 purkinje_network_path=config/half_ellipsoid_purkinje.network
 purkinje_cable_subdivision=1
@@ -68,7 +66,7 @@ purkinje_v_rest_mv=-90.0
 # fascicles of LBB). Tree grows toward apex; terminals are densest in
 # the apical 1/3 (matching Durrer 1970 / human anatomy). With LIFO stack
 # growth, indices 0, 1, 2 are the three roots themselves.
-purkinje_stim_nodes=0,1,2,3
+purkinje_stim_nodes=0,1,2
 purkinje_stim_start_ms=0.0
 purkinje_stim_end_ms=1.0
 purkinje_stim_amp_uA_per_uF=-150.0
