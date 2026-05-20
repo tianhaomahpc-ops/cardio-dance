@@ -28,9 +28,35 @@ Assembler::Assembler(const SimulationConfig& cfg, MPI_Comm comm) : cfg_(cfg), co
   m_form_->Finalize();
   M_.reset(m_form_->ParallelAssemble());
 
-  // Assemble diffusion matrix K with anisotropic conductivity.
+  // Build optional per-attribute scaling on top of FiberTensorCoefficient
+  // (AV-delay region with av_delay_sigma_scale, fibrosis with
+  // fibrosis_sigma_scale; everything else 1.0).
+  mfem::MatrixCoefficient* k_integrator_coeff = d_coeff_.get();
+  if (cfg_.enable_regional_ionic &&
+      (!cfg_.av_delay_volume_attrs.empty() || !cfg_.fibrosis_volume_attrs.empty())) {
+    int max_attr = 0;
+    for (int i = 0; i < pmesh_->GetNE(); ++i) {
+      max_attr = std::max(max_attr, pmesh_->GetAttribute(i));
+    }
+    int local_max = max_attr;
+    MPI_Allreduce(&local_max, &max_attr, 1, MPI_INT, MPI_MAX, comm_);
+    mfem::Vector sigma_scale(max_attr);
+    sigma_scale = 1.0;
+    for (int a : cfg_.av_delay_volume_attrs) {
+      if (a >= 1 && a <= max_attr) sigma_scale[a - 1] = cfg_.av_delay_sigma_scale;
+    }
+    for (int a : cfg_.fibrosis_volume_attrs) {
+      if (a >= 1 && a <= max_attr) sigma_scale[a - 1] = cfg_.fibrosis_sigma_scale;
+    }
+    region_sigma_scale_ = std::make_unique<mfem::PWConstCoefficient>(sigma_scale);
+    d_coeff_scaled_ = std::make_unique<mfem::ScalarMatrixProductCoefficient>(
+        *region_sigma_scale_, *d_coeff_);
+    k_integrator_coeff = d_coeff_scaled_.get();
+  }
+
+  // Assemble diffusion matrix K with anisotropic conductivity (+ optional scaling).
   k_form_ = std::make_unique<mfem::ParBilinearForm>(pfes_.get());
-  k_form_->AddDomainIntegrator(new mfem::DiffusionIntegrator(*d_coeff_));
+  k_form_->AddDomainIntegrator(new mfem::DiffusionIntegrator(*k_integrator_coeff));
   k_form_->Assemble();
   k_form_->Finalize();
   K_.reset(k_form_->ParallelAssemble());

@@ -34,6 +34,7 @@ class LinearSystemSolver {
   int max_it_;
   double rtol_;
   bool use_hypre_boomeramg_ = true;
+  bool use_hypre_block_jacobi_ = false;
   bool petsc_use_geometric_asm_ = true;
   int petsc_asm_nx_ = 1;
   int petsc_asm_ny_ = 1;
@@ -43,6 +44,9 @@ class LinearSystemSolver {
 
   std::unique_ptr<mfem::CGSolver> cg_;
   std::unique_ptr<mfem::HypreBoomerAMG> amg_;
+  // Block-Jacobi via Hypre's l1-Jacobi smoother. Owned here so its
+  // lifetime exceeds CG's reference to it.
+  std::unique_ptr<mfem::HypreSmoother> block_jacobi_;
 
 #ifdef MFEM_USE_PETSC
   std::unique_ptr<mfem::PetscLinearSolver> petsc_ksp_;

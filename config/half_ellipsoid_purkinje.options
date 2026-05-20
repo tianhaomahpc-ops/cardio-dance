@@ -1,0 +1,102 @@
+# Full-scale half-ellipsoid LV + 3-fascicle Purkinje (Durrer-style) + 1-lead pseudo-ECG.
+# h=1.0 mm, single MPI rank, plain CG (h=1mm at 21k nodes / 124k tets is
+# the sweet spot for this 4 vCPU sandbox: too small to benefit from MPI
+# parallelism but big enough to resolve propagation).
+#
+# Regenerate mesh:
+#   gmsh -3 tools/half_ellipsoid.geo -o benchmarks/half_ellipsoid/heart.msh \
+#        -setnumber h_mm 1.0
+#   ./build/finalize_half_ellipsoid_mesh --emit-fibers
+# Regenerate Purkinje (3 LBB-style base-side fascicle entries growing toward apex,
+# matching Durrer 1970 earliest-activation pattern: high-anterior paraseptal,
+# mid-septal, high-posterior paraseptal). The cavity_ellipsoid clip keeps all
+# nodes inside the LV endocardium (inner ellipsoid is ~30x15x15 in mesh; we
+# use 28x13x13 for a 2 mm safety margin):
+#   python3 tools/generate_purkinje_tree.py \
+#     --root=5,8,0   --direction=1,-0.3,0 \
+#     --root=10,0,5  --direction=1,0,-0.3 \
+#     --root=5,-8,0  --direction=1,0.3,0 \
+#     --length 2.5 --max_depth 17 --p_bifurcate 0.94 \
+#     --bifurcation_angle_deg 22 --angle_sigma 18 \
+#     --bbox_min=0,-14,-14 --bbox_max=29,14,14 \
+#     --cavity_ellipsoid_center=0,0,0 --cavity_ellipsoid_radii=28,13,13 \
+#     --seed 17 --out config/half_ellipsoid_purkinje.network
+
+mesh_path=benchmarks/half_ellipsoid/heart.mesh
+use_fiber_gf=1
+fiber_f_path=benchmarks/half_ellipsoid/fiber_f.gf
+fiber_s_path=benchmarks/half_ellipsoid/fiber_s.gf
+fiber_n_path=benchmarks/half_ellipsoid/fiber_n.gf
+
+# Material
+cm_uF_per_mm2=0.01
+chi_per_mm=140.0
+sigma_f_mS_per_mm=0.1334
+sigma_s_mS_per_mm=0.0176
+sigma_n_mS_per_mm=0.0176
+
+# Time
+dt_pde_ms=0.05
+dt_ode_ms=0.05
+t_end_ms=400.0
+
+# No direct myocardial stim
+stim_start_ms=0.0
+stim_end_ms=-1.0
+stim_amp=0.0
+stim_xmin_mm=0.0
+stim_xmax_mm=-1.0
+stim_ymin_mm=0.0
+stim_ymax_mm=-1.0
+stim_zmin_mm=0.0
+stim_zmax_mm=-1.0
+stim_fraction=0.0
+
+# Purkinje: 1829 nodes, 1006 terminals, base-side LBB-style roots, clipped
+# to LV endocardial cavity (28x13x13 ellipsoid).
+enable_purkinje=1
+purkinje_network_path=config/half_ellipsoid_purkinje.network
+purkinje_cable_subdivision=1
+purkinje_dt_ms=0.005
+purkinje_cm_uF_per_mm2=0.01
+purkinje_edge_g_mS_per_mm=0.20
+purkinje_v_rest_mv=-90.0
+
+# Three root nodes near base endocardium (anterior, septal, posterior
+# fascicles of LBB). Tree grows toward apex; terminals are densest in
+# the apical 1/3 (matching Durrer 1970 / human anatomy). With LIFO stack
+# growth, indices 0, 1, 2 are the three roots themselves.
+purkinje_stim_nodes=0,1,2
+purkinje_stim_start_ms=0.0
+purkinje_stim_end_ms=1.0
+purkinje_stim_amp_uA_per_uF=-150.0
+
+# PVJ smear
+pvj_g_mS=5.0
+pvj_max_dist_mm=5.0
+pvj_current_scale=4.0
+pvj_delay_ms=0.0
+pvj_smear_radius_mm=4.0
+
+# 1-lead pseudo-ECG. Probe at +y=80 mm from heart center (full scale).
+enable_pseudo_ecg=1
+pseudo_ecg_probe=lead_lateral,17.5,80,0
+pseudo_ecg_sigma_i_mS_per_mm=0.174
+pseudo_ecg_sigma_b_mS_per_mm=0.2
+pseudo_ecg_stride=10
+
+# Solver: PETSc CG + ASM(overlap=0, ICC(0) sub-PC) is the project default.
+# Activate with PETSC_OPTIONS="$(grep -v '^##\\|^$' config/petsc_asm.opts | tr '\\n' ' ')"
+# 10x fewer KSP iters than plain CG on this problem -- see
+# docs/petsc_asm_vs_cg_iter_bench.md.
+use_petsc=1
+use_hypre_boomeramg=0
+use_hypre_block_jacobi=0
+ksp_max_it=500
+ksp_rtol=1e-8
+
+# Output
+output_stride=20
+checkpoint_stride=0
+output_dir=output/half_ellipsoid_purkinje
+checkpoint_dir=checkpoint/half_ellipsoid_purkinje

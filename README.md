@@ -2,6 +2,8 @@
 
 ## Build
 
+### Path A — spack-installed dependencies (production)
+
 ```bash
 source ~/spack/share/spack/setup-env.sh
 MFEM_PREFIX=$(spack -e cardiac-sim location -i mfem)
@@ -15,6 +17,37 @@ cmake -S . -B build \
   -DMFEM_DIR="$MFEM_PREFIX" \
   -DPETSC_DIR="$PETSC_PREFIX"
 cmake --build build -j
+```
+
+### Path B — apt + source-build MFEM (sandbox / cloud VM)
+
+```bash
+# 1. System dependencies
+apt-get install -y libopenmpi-dev libhypre-dev libmetis-dev liblapack-dev \
+                   libpetsc-real-dev gmsh ffmpeg xvfb libosmesa6 libegl1
+
+# 2. Build MFEM 4.7 from source with PETSc support
+curl -sSL -o /tmp/mfem.tar.gz https://github.com/mfem/mfem/archive/v4.7.tar.gz
+tar xzf /tmp/mfem.tar.gz -C /opt
+cd /opt/mfem-4.7
+make config MFEM_USE_MPI=YES MFEM_USE_PETSC=YES MFEM_USE_LAPACK=YES \
+            MFEM_SHARED=YES MFEM_INSTALL_DIR=/opt/mfem-petsc-install \
+            PETSC_DIR=/usr/lib/petscdir/petsc3.19/x86_64-linux-gnu-real PETSC_ARCH= \
+            HYPRE_DIR=/usr HYPRE_LIB="-lHYPRE" HYPRE_OPT="-I/usr/include/hypre" \
+            METIS_DIR=/usr METIS_LIB="-lmetis"
+make -j install
+
+# 3. Build cardio-dance against it
+MFEM_DIR=/opt/mfem-petsc-install cmake -S /path/to/cardio-dance -B build
+cmake --build build -j
+```
+
+### Path C — Python venv for visualisation
+
+```bash
+python3 -m venv /tmp/venv
+/tmp/venv/bin/pip install pyvista matplotlib numpy
+# tools/plot_vm_movie.py and friends expect /tmp/venv/bin/python3
 ```
 
 ## Run
@@ -186,13 +219,38 @@ When `enable_wholebody=1`, each PDE step additionally performs:
 
 ## Solver backend
 
-- `use_petsc=0`: MFEM CG
-- `use_petsc=0` + `use_hypre_boomeramg=1`: MFEM `CG + HypreBoomerAMG` preconditioner
-- `use_petsc=1`: PETSc KSP(CG), preconditioner configurable via `PETSC_OPTIONS`
-  with prefix `mono_` (e.g. `-mono_pc_type asm -mono_sub_pc_type jacobi`)
-- ASM/GASM subdomain policy:
-  - `petsc_use_geometric_asm=1` enables explicit subdomain setup from MFEM partition ownership
-    (one local subdomain per MPI rank; aligned with MFEM/ParMETIS decomposition)
+The Crank-Nicolson diffusion system is symmetric positive-definite. Available
+backends, picked by `SimulationConfig`:
+
+| Config flag | Backend |
+|---|---|
+| `use_petsc=1` (project default for half-ellipsoid demo) | PETSc KSP + ASM(0)/ICC(0) |
+| `use_hypre_boomeramg=1` | MFEM CG + HypreBoomerAMG |
+| `use_hypre_block_jacobi=1` | MFEM CG + HypreSmoother (l1-Jacobi) |
+| all of the above 0 | plain MFEM CG (no preconditioner) |
+
+Default PETSc options live in `config/petsc_asm.opts` (CG + ASM with overlap=0
+and ICC(0) sub-PC). Activate them via:
+
+```bash
+export PETSC_OPTIONS="$(grep -v '^##\|^$' config/petsc_asm.opts | tr '\n' ' ')"
+./build/monodomain --config config/half_ellipsoid_purkinje.options
+```
+
+To override at the command line (e.g. switch sub-PC):
+
+```bash
+PETSC_OPTIONS="$(cat config/petsc_asm.opts) -mono_sub_pc_type ilu" ./build/monodomain ...
+```
+
+`docs/petsc_asm_vs_cg_iter_bench.md` shows the ASM vs plain CG iteration
+count comparison: 5 vs 50 iter/step on the 124k-tet half-ellipsoid mesh
+(10× reduction).
+
+ASM/GASM subdomain policy (legacy code path):
+- `petsc_use_geometric_asm=1` enables explicit subdomain setup from MFEM
+  partition ownership (one local subdomain per MPI rank; aligned with MFEM
+  / ParMETIS decomposition)
 
 ## Whole-body config keys
 
@@ -218,3 +276,36 @@ Detailed workflow and literature-comparison checklist:
 - `docs/wholebody_workflow.md`
 - `docs/literature_comparison.md`
 - `docs/petsc_asm_geometric_report.md`
+
+## Navigation
+
+For fast lookup of class → file → test, see `docs/code_map.md`. The
+mathematical source-of-truth for the Purkinje + PVJ + Regional stack lives
+in `docs/purkinje_numerics.md` (typeset PDF: `docs/purkinje_numerics.pdf`,
+rebuilt via `make -C docs pdf`).
+
+## Developer setup: enable repo-tracked git hooks
+
+The repository ships a `commit-msg` hook in `.githooks/` that requires
+commits touching `src/{ode,solver,space,coupling}/` to include `Math:` and
+`Mapping:` tags in the commit body. This enforces the change-log
+discipline described in `docs/purkinje_numerics.md` §12.
+
+Activate the hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+To verify the hook is live, run a self-test:
+
+```bash
+echo "tweak" > src/ode/__hook_test  # touch an algorithm-bearing path
+git add src/ode/__hook_test
+git commit -m "no tags"             # expect rejection
+# clean up
+git restore --staged src/ode/__hook_test && rm src/ode/__hook_test
+```
+
+Bypass with `git commit --no-verify` only after explicitly coordinating
+with maintainers — abusing it defeats the entire change-log discipline.

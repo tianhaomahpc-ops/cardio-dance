@@ -200,6 +200,7 @@ LinearSystemSolver::LinearSystemSolver(const SimulationConfig& cfg,
       max_it_(cfg.ksp_max_it),
       rtol_(cfg.ksp_rtol),
       use_hypre_boomeramg_(cfg.use_hypre_boomeramg),
+      use_hypre_block_jacobi_(cfg.use_hypre_block_jacobi),
       petsc_use_geometric_asm_(cfg.petsc_use_geometric_asm),
       petsc_asm_nx_(cfg.petsc_asm_nx),
       petsc_asm_ny_(cfg.petsc_asm_ny),
@@ -269,12 +270,19 @@ void LinearSystemSolver::SetOperator(const mfem::HypreParMatrix& A) {
     return;
   }
 #endif
-  // 非 PETSc 路径：MFEM CG，可选 BoomerAMG 预条件。
+  // 非 PETSc 路径：MFEM CG + 可选预条件子。
   if (use_hypre_boomeramg_) {
     // 按 MFEM 官方示例方式：由算子 A 构造 BoomerAMG。
     amg_ = std::make_unique<mfem::HypreBoomerAMG>(A);
     amg_->SetPrintLevel(0);
     cg_->SetPreconditioner(*amg_);
+  } else if (use_hypre_block_jacobi_) {
+    // Hypre l1-Jacobi smoother as a fixed-pattern block-Jacobi PC.
+    // Type 18 = "l1 Gauss-Seidel" / "block Jacobi" (block-diagonal of
+    // the local on-rank submatrix); much cheaper to set up than AMG.
+    block_jacobi_ = std::make_unique<mfem::HypreSmoother>(
+        const_cast<mfem::HypreParMatrix&>(A), mfem::HypreSmoother::l1Jacobi);
+    cg_->SetPreconditioner(*block_jacobi_);
   }
   cg_->SetOperator(A);
 }

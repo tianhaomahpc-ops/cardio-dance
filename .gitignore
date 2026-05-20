@@ -1,9 +1,7 @@
 build/
-output/
 checkpoint/
 --output-dir/
 Testing/
-benchmarks/
 *.o
 *.obj
 *.so
@@ -13,3 +11,25 @@ benchmarks/
 *.swp
 *.DS_Store
 test_config_parse.options
+
+# Generated LaTeX intermediates
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+
+# Benchmark mesh artifacts: ignore generated mesh/fiber files but keep the
+# benchmarks dir tracked (.geo + .gitkeep live there).
+benchmarks/*/heart.mesh
+benchmarks/*/heart.msh
+benchmarks/*/fiber_*.gf
+
+# Simulation outputs are regenerable, so we ignore them by default but
+# allow specific artifacts under output/half_ellipsoid_purkinje/ to be
+# committed for GitHub review.
+output/*
+!output/half_ellipsoid_purkinje/
+output/half_ellipsoid_purkinje/heart/
+output/half_ellipsoid_purkinje/*.csv
+output/half_ellipsoid_purkinje/timing*.csv
+output/half_ellipsoid_purkinje/ksp*.csv

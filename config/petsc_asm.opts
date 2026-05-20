@@ -1,0 +1,25 @@
+## PETSc options for cardio-dance monodomain solver.
+## Activated when use_petsc=1 in the .options file. Loaded via PETSC_OPTIONS
+## env var or PetscInitializeFile.
+##
+## Default: CG + ASM(0 overlap, ICC(0) sub-PC).
+##  - The Crank-Nicolson system A = chi*Cm/dt * M + 0.5 * K is symmetric
+##    positive-definite, so ICC(0) (Incomplete Cholesky, zero fill) is a
+##    valid sub-PC and ~30% cheaper to apply than ILU(0).
+##  - overlap 0 = no element-overlap between subdomains; the cheapest
+##    Schwarz variant. Higher overlap typically does not pay off when
+##    iter counts are already small (4-6 with this PC).
+##  - All options prefixed "mono_" to match LinearSolverFactory.cpp.
+##
+## To experiment, override via additional CLI: e.g.
+##   PETSC_OPTIONS="$(cat config/petsc_asm.opts) -mono_pc_asm_overlap 1" \
+##     ./build/monodomain --config <opts>
+
+-mono_ksp_type cg
+-mono_ksp_max_it 500
+-mono_ksp_rtol 1e-8
+-mono_ksp_norm_type unpreconditioned
+-mono_pc_type asm
+-mono_pc_asm_overlap 0
+-mono_sub_pc_type icc
+-mono_sub_pc_factor_levels 0
